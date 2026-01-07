@@ -1,7 +1,8 @@
 ---
 schema_version: 1
 id: d5favcr
-status: in_progress
+status: closed
+closed: 2026-01-07T20:24:57Z
 blocked-by: [d5fav78]
 created: 2026-01-07T19:02:11Z
 type: task
