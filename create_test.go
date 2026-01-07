@@ -973,6 +973,114 @@ func Test_Create_With_Changes_No_Changes_Succeeds(t *testing.T) {
 	AssertContains(t, stdout, "Created worktree:")
 }
 
+// Tests for rollback error handling with errors.Join
+
+func Test_Create_Rollback_On_Hook_Failure_Shows_Only_Hook_Error_When_Rollback_Succeeds(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	// Create a post-create hook that fails
+	hookScript := `#!/bin/bash
+echo "hook failed deliberately" >&2
+exit 1
+`
+	cli.WriteExecutable(".wt/hooks/post-create", hookScript)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--name", "rollback-test")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	// Should see hook error
+	AssertContains(t, stderr, "post-create hook failed")
+
+	// Should NOT see rollback errors (since rollback succeeded)
+	if strings.Contains(stderr, "git worktree remove failed") {
+		t.Error("should not see worktree remove error when rollback succeeded")
+	}
+
+	if strings.Contains(stderr, "git branch delete failed") {
+		t.Error("should not see branch delete error when rollback succeeded")
+	}
+}
+
+func Test_Create_Rollback_On_Hook_Failure_Includes_Rollback_Errors_When_Rollback_Fails(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	// Create a post-create hook that:
+	// 1. Makes .git/worktrees unreadable so git worktree remove will fail
+	// 2. Exits with error
+	hookScript := `#!/bin/bash
+chmod 000 "$WT_REPO_ROOT/.git/worktrees"
+exit 1
+`
+	cli.WriteExecutable(".wt/hooks/post-create", hookScript)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--name", "bad-rollback")
+
+	// Restore permissions so cleanup can happen
+	_ = os.Chmod(filepath.Join(cli.Dir, ".git", "worktrees"), 0o700)
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	// Should see hook error
+	AssertContains(t, stderr, "post-create hook failed")
+
+	// Should see rollback error because git couldn't access .git/worktrees
+	AssertContains(t, stderr, "git worktree remove failed")
+}
+
+func Test_Create_Rollback_Includes_Both_Errors_When_Both_Operations_Fail(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	// Create a hook that:
+	// 1. Makes .git/worktrees unreadable (worktree remove fails)
+	// 2. Makes .git/refs/heads unreadable (branch delete fails)
+	// 3. Exits with error
+	hookScript := `#!/bin/bash
+chmod 000 "$WT_REPO_ROOT/.git/worktrees"
+chmod 000 "$WT_REPO_ROOT/.git/refs/heads"
+exit 1
+`
+	cli.WriteExecutable(".wt/hooks/post-create", hookScript)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--name", "both-fail")
+
+	// Restore permissions so cleanup can happen
+	_ = os.Chmod(filepath.Join(cli.Dir, ".git", "worktrees"), 0o700)
+	_ = os.Chmod(filepath.Join(cli.Dir, ".git", "refs", "heads"), 0o700)
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	// Should see hook error
+	AssertContains(t, stderr, "post-create hook failed")
+
+	// Should see worktree remove error
+	AssertContains(t, stderr, "git worktree remove failed")
+
+	// Should see branch delete error
+	AssertContains(t, stderr, "git branch delete failed")
+}
+
 // Helper function to create a branch in a git repo.
 func createBranch(t *testing.T, repoDir, branchName string) {
 	t.Helper()

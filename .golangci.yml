@@ -204,6 +204,10 @@ linters:
         linters:
           - gosec
       - path: _test\.go
+        text: "G302:" # directory permissions for test cleanup
+        linters:
+          - gosec
+      - path: _test\.go
         text: "G306:" # file permissions > 0600
         linters:
           - gosec

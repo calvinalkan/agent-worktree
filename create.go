@@ -131,10 +131,14 @@ func execCreate(
 	err = writeWorktreeInfo(fsys, wtPath, info)
 	if err != nil {
 		// Rollback: remove worktree
-		_ = git.WorktreeRemove(repoRoot, wtPath, true)
-		_ = git.BranchDelete(repoRoot, name, true)
+		rmErr := git.WorktreeRemove(repoRoot, wtPath, true)
+		brErr := git.BranchDelete(repoRoot, name, true)
 
-		return fmt.Errorf("writing worktree metadata: %w", err)
+		return errors.Join(
+			fmt.Errorf("writing worktree metadata: %w", err),
+			rmErr,
+			brErr,
+		)
 	}
 
 	// 10. If --with-changes: copy uncommitted changes
@@ -142,10 +146,14 @@ func execCreate(
 		err = copyUncommittedChanges(fsys, git, cfg.EffectiveCwd, wtPath)
 		if err != nil {
 			// Rollback: remove worktree and delete branch
-			_ = git.WorktreeRemove(repoRoot, wtPath, true)
-			_ = git.BranchDelete(repoRoot, name, true)
+			rmErr := git.WorktreeRemove(repoRoot, wtPath, true)
+			brErr := git.BranchDelete(repoRoot, name, true)
 
-			return fmt.Errorf("copying uncommitted changes: %w", err)
+			return errors.Join(
+				fmt.Errorf("copying uncommitted changes: %w", err),
+				rmErr,
+				brErr,
+			)
 		}
 	}
 
@@ -155,10 +163,14 @@ func execCreate(
 	err = hookRunner.RunPostCreate(ctx, info, wtPath, cfg.EffectiveCwd)
 	if err != nil {
 		// 12. Rollback: remove worktree and delete branch
-		_ = git.WorktreeRemove(repoRoot, wtPath, true)
-		_ = git.BranchDelete(repoRoot, name, true)
+		rmErr := git.WorktreeRemove(repoRoot, wtPath, true)
+		brErr := git.BranchDelete(repoRoot, name, true)
 
-		return fmt.Errorf("post-create hook failed: %w", err)
+		return errors.Join(
+			fmt.Errorf("post-create hook failed: %w", err),
+			rmErr,
+			brErr,
+		)
 	}
 
 	// 13. Print success output
