@@ -20,9 +20,9 @@ var ErrNameAlreadyInUse = errors.New("name already in use")
 func CreateCmd(cfg Config, fsys fs.FS, git *Git, env map[string]string) *Command {
 	flags := flag.NewFlagSet("create", flag.ContinueOnError)
 	flags.BoolP("help", "h", false, "Show help")
-	flags.StringP("name", "n", "", "Custom worktree name")
-	flags.StringP("from-branch", "b", "", "Create from branch (default: current branch)")
-	flags.Bool("with-changes", false, "Copy uncommitted changes to new worktree")
+	flags.StringP("name", "n", "", "Worktree and branch name (default: auto-generated)")
+	flags.StringP("from-branch", "b", "", "Branch to base off (default: current branch)")
+	flags.Bool("with-changes", false, "Copy staged, unstaged, and untracked files to new worktree")
 
 	return &Command{
 		Flags: flags,
@@ -30,8 +30,12 @@ func CreateCmd(cfg Config, fsys fs.FS, git *Git, env map[string]string) *Command
 		Short: "Create a new worktree",
 		Long: `Create a new worktree with auto-generated name and unique ID.
 
-A random agent_id is generated (e.g., swift-fox) and used as the default
-worktree name. Use --name to override.`,
+A git branch is created with the same name as the worktree. The worktree
+directory is created at <base>/<repo>/<name>, where base is configured
+in .wt/config.json or ~/.config/wt/config.json.
+
+Metadata is written to .wt/worktree.json inside the new worktree.
+If .wt/hooks/post-create exists and is executable, it runs after creation.`,
 		Exec: func(ctx context.Context, _ io.Reader, stdout, stderr io.Writer, _ []string) error {
 			customName, _ := flags.GetString("name")
 			fromBranch, _ := flags.GetString("from-branch")

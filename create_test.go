@@ -621,6 +621,29 @@ func Test_Create_Help_Shows_Usage(t *testing.T) {
 	AssertContains(t, stdout, "--with-changes")
 }
 
+func Test_Create_Help_Shows_Detailed_Description(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+
+	stdout, _, code := cli.Run("create", "--help")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0 for help, got %d", code)
+	}
+
+	// Verify description explains what gets created
+	AssertContains(t, stdout, "A git branch is created with the same name as the worktree")
+	AssertContains(t, stdout, "<base>/<repo>/<name>")
+	AssertContains(t, stdout, ".wt/worktree.json")
+	AssertContains(t, stdout, "post-create")
+
+	// Verify improved flag descriptions
+	AssertContains(t, stdout, "Worktree and branch name (default: auto-generated)")
+	AssertContains(t, stdout, "Branch to base off (default: current branch)")
+	AssertContains(t, stdout, "Copy staged, unstaged, and untracked files")
+}
+
 func Test_Create_Output_Path_Is_Absolute(t *testing.T) {
 	t.Parallel()
 
