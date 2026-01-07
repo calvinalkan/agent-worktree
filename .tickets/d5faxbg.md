@@ -1,7 +1,8 @@
 ---
 schema_version: 1
 id: d5faxbg
-status: open
+status: closed
+closed: 2026-01-07T21:54:43Z
 blocked-by: [d5fawn0, d5faw58, d5fawb0, d5fayh0]
 created: 2026-01-07T19:06:22Z
 type: task
