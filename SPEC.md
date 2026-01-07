@@ -37,8 +37,21 @@ The `-h` / `--help` flag may appear anywhere in the command line. When present, 
 |------|---------|
 | 0 | Success. Stdout is safe to parse. |
 | 1 | Error. Stdout not safe to parse, check stderr for details. |
+| 130 | Interrupted (Ctrl+C). Operation was cancelled. |
 
 Stdout is always reserved for machine-readable output (paths, JSON, etc.). Stderr is always used for error messages and diagnostics.
+
+---
+
+### Signal Handling
+
+When `wt` receives an interrupt signal (Ctrl+C / SIGINT / SIGTERM):
+
+1. Current operation is cancelled gracefully
+2. Message printed: "Interrupted, waiting up to 10s for cleanup..."
+3. Waits up to 10 seconds for cleanup (e.g., hook termination, rollback)
+4. A second Ctrl+C forces immediate exit
+5. Exit code is 130
 
 ---
 
@@ -215,7 +228,7 @@ brave-owl       ~/code/worktrees/my-repo/brave-owl                1 hour ago
 ]
 ```
 
-If `.wt/worktree.json` is missing for a worktree, fields are populated from git where possible; `agent_id` and `id` will be null.
+Only worktrees with `.wt/worktree.json` (created by `wt create`) are listed.
 
 ---
 
@@ -353,6 +366,12 @@ Hooks are executable files located in `.wt/hooks/`. They use shebang (`#!/bin/ba
 - If hook file exists but is not executable, exit with error
 - Hooks have a timeout of 5 minutes; if exceeded, the hook is killed and treated as failure
 - Exit code 0 = success; any non-zero exit code = failure
+
+**Cancellation**:
+- When `wt` receives an interrupt signal (Ctrl+C), hooks receive SIGTERM
+- Hooks can trap SIGTERM to perform cleanup (stop containers, remove temp files, etc.)
+- Hooks have 7 seconds to exit after receiving SIGTERM
+- If a hook does not exit within 7 seconds, it is forcibly killed with SIGKILL
 
 **Failure handling**:
 - `post-create` failure: worktree and branch are deleted (rollback), exit with error

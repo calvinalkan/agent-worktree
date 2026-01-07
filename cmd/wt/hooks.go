@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/calvinalkan/agent-task/pkg/fs"
@@ -112,6 +113,14 @@ func runHook(
 	cmd.Dir = cwd
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
+
+	// Send SIGTERM instead of SIGKILL on context cancellation.
+	// This gives hooks a chance to clean up gracefully.
+	// WaitDelay ensures we SIGKILL after 3s if the hook ignores the signal.
+	cmd.Cancel = func() error {
+		return cmd.Process.Signal(syscall.SIGTERM)
+	}
+	cmd.WaitDelay = 7 * time.Second
 
 	// Build environment from baseEnv + wtEnv
 	cmd.Env = make([]string, 0, len(baseEnv)+len(wtEnv))

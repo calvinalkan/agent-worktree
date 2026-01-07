@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // CLI provides a clean interface for running CLI commands in tests.
@@ -81,6 +82,22 @@ func (c *CLI) RunWithInput(stdin any, args ...string) (string, string, int) {
 	return outBuf.String(), errBuf.String(), code
 }
 
+// RunWithSignal executes the CLI with a signal channel for cancellation testing.
+// Returns a channel that receives the exit code when the command completes.
+// stdout/stderr are discarded to avoid race conditions with signal handler output.
+func (c *CLI) RunWithSignal(sigCh chan os.Signal, args ...string) <-chan int {
+	done := make(chan int, 1)
+
+	go func() {
+		fullArgs := append([]string{"wt", "--cwd", c.Dir}, args...)
+
+		code := Run(nil, io.Discard, io.Discard, fullArgs, c.Env, sigCh)
+		done <- code
+	}()
+
+	return done
+}
+
 // MustRun executes the CLI and fails the test if the command returns non-zero.
 // Returns trimmed stdout on success.
 func (c *CLI) MustRun(args ...string) string {
@@ -148,6 +165,7 @@ func (c *CLI) WriteFile(relPath, content string) {
 
 // WriteExecutable writes an executable script to a file in the test directory.
 // Used for creating hook scripts that need to be executable.
+// Uses explicit Open/Write/Sync/Close to avoid "text file busy" errors.
 func (c *CLI) WriteExecutable(relPath, content string) {
 	c.t.Helper()
 
@@ -159,10 +177,33 @@ func (c *CLI) WriteExecutable(relPath, content string) {
 		c.t.Fatalf("failed to create dir %s: %v", dir, err)
 	}
 
-	err = os.WriteFile(path, []byte(content), 0o755)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755)
 	if err != nil {
+		c.t.Fatalf("failed to create executable %s: %v", relPath, err)
+	}
+
+	_, err = f.WriteString(content)
+	if err != nil {
+		_ = f.Close()
+
 		c.t.Fatalf("failed to write executable %s: %v", relPath, err)
 	}
+
+	err = f.Sync()
+	if err != nil {
+		_ = f.Close()
+
+		c.t.Fatalf("failed to sync executable %s: %v", relPath, err)
+	}
+
+	err = f.Close()
+	if err != nil {
+		c.t.Fatalf("failed to close executable %s: %v", relPath, err)
+	}
+
+	// Brief sleep to ensure filesystem has fully released the file.
+	// This works around "text file busy" errors on some systems.
+	time.Sleep(10 * time.Millisecond)
 }
 
 // ReadFile reads content from a file in the test directory.

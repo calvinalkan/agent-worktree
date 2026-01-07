@@ -15,6 +15,40 @@ import (
 
 const windowsOS = "windows"
 
+// writeExecutableFile writes an executable script, ensuring it's fully synced
+// to disk before returning. This avoids "text file busy" errors on exec.
+func writeExecutableFile(t *testing.T, path string, content []byte) {
+	t.Helper()
+
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755)
+	if err != nil {
+		t.Fatalf("failed to create executable %s: %v", path, err)
+	}
+
+	_, err = f.Write(content)
+	if err != nil {
+		_ = f.Close()
+
+		t.Fatalf("failed to write executable %s: %v", path, err)
+	}
+
+	err = f.Sync()
+	if err != nil {
+		_ = f.Close()
+
+		t.Fatalf("failed to sync executable %s: %v", path, err)
+	}
+
+	err = f.Close()
+	if err != nil {
+		t.Fatalf("failed to close executable %s: %v", path, err)
+	}
+
+	// Brief sleep to ensure filesystem has fully released the file.
+	// This works around "text file busy" errors on some systems.
+	time.Sleep(10 * time.Millisecond)
+}
+
 func Test_runHook_Skips_When_Hook_Not_Present(t *testing.T) {
 	t.Parallel()
 
@@ -106,7 +140,8 @@ func Test_runHook_Executes_Hook_Successfully(t *testing.T) {
 
 	hookPath := filepath.Join(hookDir, "post-create")
 
-	err = os.WriteFile(hookPath, []byte("#!/bin/bash\necho 'hook executed'"), 0o755)
+	writeExecutableFile(t, hookPath, []byte("#!/bin/bash\necho 'hook executed'"))
+
 	if err != nil {
 		t.Fatalf("failed to write hook: %v", err)
 	}
@@ -153,7 +188,8 @@ func Test_runHook_Returns_Error_When_Hook_Fails(t *testing.T) {
 
 	hookPath := filepath.Join(hookDir, "post-create")
 
-	err = os.WriteFile(hookPath, []byte("#!/bin/bash\nexit 1"), 0o755)
+	writeExecutableFile(t, hookPath, []byte("#!/bin/bash\nexit 1"))
+
 	if err != nil {
 		t.Fatalf("failed to write hook: %v", err)
 	}
@@ -209,7 +245,8 @@ echo "REPO_ROOT=$WT_REPO_ROOT"
 echo "SOURCE=$WT_SOURCE"
 `
 
-	err = os.WriteFile(hookPath, []byte(hookScript), 0o755)
+	writeExecutableFile(t, hookPath, []byte(hookScript))
+
 	if err != nil {
 		t.Fatalf("failed to write hook: %v", err)
 	}
@@ -281,7 +318,8 @@ func Test_runHook_Uses_Cwd(t *testing.T) {
 
 	hookPath := filepath.Join(hookDir, "post-create")
 
-	err = os.WriteFile(hookPath, []byte("#!/bin/bash\npwd"), 0o755)
+	writeExecutableFile(t, hookPath, []byte("#!/bin/bash\npwd"))
+
 	if err != nil {
 		t.Fatalf("failed to write hook: %v", err)
 	}
@@ -374,7 +412,8 @@ func Test_HookRunner_RunPostCreate_Calls_Hook(t *testing.T) {
 
 	hookPath := filepath.Join(hookDir, "post-create")
 
-	err = os.WriteFile(hookPath, []byte("#!/bin/bash\necho post-create-ran"), 0o755)
+	writeExecutableFile(t, hookPath, []byte("#!/bin/bash\necho post-create-ran"))
+
 	if err != nil {
 		t.Fatalf("failed to write hook: %v", err)
 	}
@@ -415,7 +454,8 @@ func Test_HookRunner_RunPreDelete_Calls_Hook(t *testing.T) {
 
 	hookPath := filepath.Join(hookDir, "pre-delete")
 
-	err = os.WriteFile(hookPath, []byte("#!/bin/bash\necho pre-delete-ran"), 0o755)
+	writeExecutableFile(t, hookPath, []byte("#!/bin/bash\necho pre-delete-ran"))
+
 	if err != nil {
 		t.Fatalf("failed to write hook: %v", err)
 	}
@@ -659,4 +699,286 @@ echo "hook was here" > "$WT_REPO_ROOT/hook-marker.txt"
 
 	content := c.ReadFile("hook-marker.txt")
 	AssertContains(t, content, "hook was here")
+}
+
+func Test_E2E_Hook_Receives_Signal_On_Cancellation(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsOS {
+		t.Skip("skipping shell script test on Windows")
+	}
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Hook that:
+	// 1. Writes 'started' immediately
+	// 2. Traps TERM signal and writes 'signal-received'
+	// 3. Sleeps forever (until killed)
+	hookScript := `#!/bin/bash
+echo "started" > "$WT_REPO_ROOT/hook-started.txt"
+
+cleanup() {
+    echo "signal-received" > "$WT_REPO_ROOT/hook-signal.txt"
+    exit 0
+}
+
+trap cleanup TERM INT
+
+# Sleep in a loop so trap can be processed
+while true; do
+    sleep 0.1
+done
+`
+	c.WriteExecutable(".wt/hooks/post-create", hookScript)
+
+	// Test timeout - fail fast if something is broken
+	testTimeout := 5 * time.Second
+	deadline := time.Now().Add(testTimeout)
+
+	// Start create with signal channel
+	sigCh := make(chan os.Signal, 1)
+	done := c.RunWithSignal(sigCh, "--config", "config.json", "create", "--name", "signal-test")
+
+	// Poll for hook to start
+	for !c.FileExists("hook-started.txt") {
+		if time.Now().After(deadline) {
+			t.Fatal("timeout waiting for hook to start")
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Send signal
+	sigCh <- os.Interrupt
+
+	// Wait for command to finish with timeout
+	select {
+	case code := <-done:
+		// Should exit with 130 (128 + SIGINT)
+		if code != 130 {
+			t.Errorf("expected exit code 130, got %d", code)
+		}
+	case <-time.After(time.Until(deadline)):
+		t.Fatal("timeout waiting for command to finish after signal")
+	}
+
+	// Verify signal was received by the hook
+	if !c.FileExists("hook-signal.txt") {
+		t.Error("hook should have received signal and written hook-signal.txt")
+	}
+
+	signalContent := strings.TrimSpace(c.ReadFile("hook-signal.txt"))
+	if signalContent != "signal-received" {
+		t.Errorf("expected 'signal-received', got %q", signalContent)
+	}
+}
+
+func Test_E2E_Hook_Is_Killed_If_Ignores_Signal(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsOS {
+		t.Skip("skipping shell script test on Windows")
+	}
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Hook that ignores signals and tries to write after a long sleep.
+	// If SIGKILL works, the "survived" file will never be written.
+	hookScript := `#!/bin/bash
+echo "started" > "$WT_REPO_ROOT/hook-started.txt"
+
+# Ignore all signals
+trap '' TERM INT
+
+# Sleep longer than WaitDelay (7s), then write
+sleep 20
+echo "survived" > "$WT_REPO_ROOT/hook-survived.txt"
+`
+	c.WriteExecutable(".wt/hooks/post-create", hookScript)
+
+	// Test should complete within 15s (7s WaitDelay + buffer)
+	testTimeout := 15 * time.Second
+	deadline := time.Now().Add(testTimeout)
+
+	// Start create with signal channel
+	sigCh := make(chan os.Signal, 1)
+	done := c.RunWithSignal(sigCh, "--config", "config.json", "create", "--name", "stuck-hook-test")
+
+	// Poll for hook to start
+	for !c.FileExists("hook-started.txt") {
+		if time.Now().After(deadline) {
+			t.Fatal("timeout waiting for hook to start")
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Send signal - hook will ignore it
+	sigCh <- os.Interrupt
+
+	// Command should still finish (due to WaitDelay + SIGKILL)
+	select {
+	case code := <-done:
+		// Should exit with 130 (interrupted)
+		if code != 130 {
+			t.Errorf("expected exit code 130, got %d", code)
+		}
+	case <-time.After(time.Until(deadline)):
+		t.Fatal("timeout: hook was not killed after ignoring signal")
+	}
+
+	// The hook should have been killed before it could write "survived"
+	if c.FileExists("hook-survived.txt") {
+		t.Error("hook should have been killed before writing hook-survived.txt")
+	}
+}
+
+func Test_E2E_PreDelete_Hook_Receives_Signal_On_Cancellation(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsOS {
+		t.Skip("skipping shell script test on Windows")
+	}
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// First create a worktree
+	_, stderr, code := c.Run("--config", "config.json", "create", "--name", "to-delete")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Hook that traps signals and writes confirmation
+	hookScript := `#!/bin/bash
+echo "started" > "$WT_REPO_ROOT/hook-started.txt"
+
+cleanup() {
+    echo "signal-received" > "$WT_REPO_ROOT/hook-signal.txt"
+    exit 0
+}
+
+trap cleanup TERM INT
+
+# Sleep in a loop so trap can be processed
+while true; do
+    sleep 0.1
+done
+`
+	c.WriteExecutable(".wt/hooks/pre-delete", hookScript)
+
+	// Test timeout
+	testTimeout := 5 * time.Second
+	deadline := time.Now().Add(testTimeout)
+
+	// Start delete with signal channel
+	sigCh := make(chan os.Signal, 1)
+	done := c.RunWithSignal(sigCh, "--config", "config.json", "delete", "to-delete", "--force")
+
+	// Poll for hook to start
+	for !c.FileExists("hook-started.txt") {
+		if time.Now().After(deadline) {
+			t.Fatal("timeout waiting for hook to start")
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Send signal
+	sigCh <- os.Interrupt
+
+	// Wait for command to finish with timeout
+	select {
+	case code := <-done:
+		if code != 130 {
+			t.Errorf("expected exit code 130, got %d", code)
+		}
+	case <-time.After(time.Until(deadline)):
+		t.Fatal("timeout waiting for command to finish after signal")
+	}
+
+	// Verify signal was received by the hook
+	if !c.FileExists("hook-signal.txt") {
+		t.Error("hook should have received signal and written hook-signal.txt")
+	}
+
+	signalContent := strings.TrimSpace(c.ReadFile("hook-signal.txt"))
+	if signalContent != "signal-received" {
+		t.Errorf("expected 'signal-received', got %q", signalContent)
+	}
+}
+
+func Test_E2E_PreDelete_Hook_Is_Killed_If_Ignores_Signal(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsOS {
+		t.Skip("skipping shell script test on Windows")
+	}
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// First create a worktree
+	_, stderr, code := c.Run("--config", "config.json", "create", "--name", "to-delete")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Hook that ignores signals
+	hookScript := `#!/bin/bash
+echo "started" > "$WT_REPO_ROOT/hook-started.txt"
+
+# Ignore all signals
+trap '' TERM INT
+
+# Sleep longer than WaitDelay (7s), then write
+sleep 20
+echo "survived" > "$WT_REPO_ROOT/hook-survived.txt"
+`
+	c.WriteExecutable(".wt/hooks/pre-delete", hookScript)
+
+	// Test should complete within 15s (7s WaitDelay + buffer)
+	testTimeout := 15 * time.Second
+	deadline := time.Now().Add(testTimeout)
+
+	// Start delete with signal channel
+	sigCh := make(chan os.Signal, 1)
+	done := c.RunWithSignal(sigCh, "--config", "config.json", "delete", "to-delete", "--force")
+
+	// Poll for hook to start
+	for !c.FileExists("hook-started.txt") {
+		if time.Now().After(deadline) {
+			t.Fatal("timeout waiting for hook to start")
+		}
+
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Send signal - hook will ignore it
+	sigCh <- os.Interrupt
+
+	// Command should still finish (due to WaitDelay + SIGKILL)
+	select {
+	case code := <-done:
+		if code != 130 {
+			t.Errorf("expected exit code 130, got %d", code)
+		}
+	case <-time.After(time.Until(deadline)):
+		t.Fatal("timeout: hook was not killed after ignoring signal")
+	}
+
+	// The hook should have been killed before it could write "survived"
+	if c.FileExists("hook-survived.txt") {
+		t.Error("hook should have been killed before writing hook-survived.txt")
+	}
 }

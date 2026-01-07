@@ -131,7 +131,7 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 	case exitCode := <-done:
 		return exitCode
 	case <-sigCh:
-		fprintln(stderr, "Interrupted, waiting up to 5s for cleanup... (Ctrl+C again to force exit)")
+		fprintln(stderr, "Interrupted, waiting up to 10s for cleanup... (Ctrl+C again to force exit)")
 		cancel()
 	}
 
@@ -141,7 +141,7 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 		fprintln(stderr, "Cleanup complete.")
 
 		return 130
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		fprintln(stderr, "Cleanup timed out, forced exit.")
 
 		return 130

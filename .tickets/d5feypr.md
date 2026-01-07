@@ -1,7 +1,8 @@
 ---
 schema_version: 1
 id: d5feypr
-status: open
+status: closed
+closed: 2026-01-07T23:50:20Z
 blocked-by: []
 created: 2026-01-07T23:42:19Z
 type: task
