@@ -66,9 +66,10 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 	git := NewGit(envSlice)
 
 	// Load config (handles --cwd resolution internally)
-	cfg, err := LoadConfig(fsys, LoadConfigInput{
+	cfg, err := LoadConfig(fsys, git, LoadConfigInput{
 		WorkDirOverride: *flagCwd,
 		ConfigPath:      *flagConfig,
+		Env:             env,
 	})
 	if err != nil {
 		fprintln(stderr, "error:", err)
@@ -204,12 +205,19 @@ func DefaultConfig() Config {
 
 // LoadConfigInput holds the inputs for LoadConfig.
 type LoadConfigInput struct {
-	WorkDirOverride string // -C/--cwd flag value; if empty, os.Getwd() is used
-	ConfigPath      string // -c/--config flag value
+	WorkDirOverride string            // -C/--cwd flag value; if empty, os.Getwd() is used
+	ConfigPath      string            // -c/--config flag value
+	Env             map[string]string // Environment variables (for XDG_CONFIG_HOME)
 }
 
-// LoadConfig loads configuration from file or returns defaults.
-func LoadConfig(fsys fs.FS, input LoadConfigInput) (Config, error) {
+// LoadConfig loads configuration with the following precedence (highest first):
+// 1. --config flag (explicit path) - if provided, uses ONLY this file
+// 2. Project config: .wt/config.json in repository root
+// 3. User config: $XDG_CONFIG_HOME/wt/config.json or ~/.config/wt/config.json
+// 4. Built-in defaults
+//
+// Project and user configs are merged, with project taking precedence.
+func LoadConfig(fsys fs.FS, git *Git, input LoadConfigInput) (Config, error) {
 	// Resolve effective working directory
 	workDir := input.WorkDirOverride
 	if workDir == "" {
@@ -231,44 +239,58 @@ func LoadConfig(fsys fs.FS, input LoadConfigInput) (Config, error) {
 		workDir = filepath.Join(cwd, workDir)
 	}
 
-	configPath := input.ConfigPath
-	if configPath == "" {
-		// Use default location - if home dir unavailable, use defaults
-		configPath = defaultConfigPath()
-
-		if configPath == "" {
-			cfg := DefaultConfig()
-			cfg.EffectiveCwd = workDir
-
-			return cfg, nil
-		}
-	} else if !filepath.IsAbs(configPath) {
-		// Resolve relative config path against effective working directory
-		configPath = filepath.Join(workDir, configPath)
-	}
-
-	data, err := fsys.ReadFile(configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			cfg := DefaultConfig()
-			cfg.EffectiveCwd = workDir
-
-			return cfg, nil
+	// If explicit config path provided, use ONLY that file
+	if input.ConfigPath != "" {
+		configPath := input.ConfigPath
+		if !filepath.IsAbs(configPath) {
+			configPath = filepath.Join(workDir, configPath)
 		}
 
-		return Config{}, fmt.Errorf("reading config: %w", err)
+		cfg, err := loadConfigFile(fsys, configPath)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				cfg = DefaultConfig()
+				cfg.EffectiveCwd = workDir
+
+				return cfg, nil
+			}
+
+			return Config{}, err
+		}
+
+		cfg = applyConfigDefaults(cfg)
+		cfg.EffectiveCwd = workDir
+
+		return cfg, nil
 	}
 
-	var cfg Config
+	// Start with defaults
+	cfg := DefaultConfig()
 
-	err = json.Unmarshal(data, &cfg)
-	if err != nil {
-		return Config{}, fmt.Errorf("parsing config: %w", err)
+	// Load user config (lowest precedence after defaults)
+	userConfigPath := getUserConfigPath(input.Env)
+	if userConfigPath != "" {
+		userCfg, loadErr := loadConfigFile(fsys, userConfigPath)
+		if loadErr == nil {
+			cfg = mergeConfigs(cfg, userCfg)
+		} else if !errors.Is(loadErr, os.ErrNotExist) {
+			// File exists but is invalid - this is an error
+			return Config{}, loadErr
+		}
 	}
 
-	// Apply defaults for missing fields
-	if cfg.Base == "" {
-		cfg.Base = DefaultConfig().Base
+	// Load project config (higher precedence than user config)
+	repoRoot, err := git.RepoRoot(workDir)
+	if err == nil {
+		projectConfigPath := filepath.Join(repoRoot, ".wt", "config.json")
+
+		projectCfg, loadErr := loadConfigFile(fsys, projectConfigPath)
+		if loadErr == nil {
+			cfg = mergeConfigs(cfg, projectCfg)
+		} else if !errors.Is(loadErr, os.ErrNotExist) {
+			// File exists but is invalid - this is an error
+			return Config{}, loadErr
+		}
 	}
 
 	cfg.EffectiveCwd = workDir
@@ -276,9 +298,51 @@ func LoadConfig(fsys fs.FS, input LoadConfigInput) (Config, error) {
 	return cfg, nil
 }
 
-// defaultConfigPath returns the default config file path.
-// Returns empty string if home directory cannot be determined.
-func defaultConfigPath() string {
+// loadConfigFile loads and parses a config file.
+func loadConfigFile(fsys fs.FS, path string) (Config, error) {
+	data, err := fsys.ReadFile(path)
+	if err != nil {
+		return Config{}, fmt.Errorf("reading config %s: %w", path, err)
+	}
+
+	var cfg Config
+
+	err = json.Unmarshal(data, &cfg)
+	if err != nil {
+		return Config{}, fmt.Errorf("parsing config %s: %w", path, err)
+	}
+
+	return cfg, nil
+}
+
+// mergeConfigs merges override into base, with override taking precedence.
+// Empty/zero values in override do not override base values.
+func mergeConfigs(base, override Config) Config {
+	result := base
+
+	if override.Base != "" {
+		result.Base = override.Base
+	}
+
+	return result
+}
+
+// applyConfigDefaults fills in missing fields with default values.
+func applyConfigDefaults(cfg Config) Config {
+	if cfg.Base == "" {
+		cfg.Base = DefaultConfig().Base
+	}
+
+	return cfg
+}
+
+// getUserConfigPath returns the user config path.
+// Uses env map for XDG_CONFIG_HOME instead of os.Getenv().
+func getUserConfigPath(env map[string]string) string {
+	if xdg, ok := env["XDG_CONFIG_HOME"]; ok && xdg != "" {
+		return filepath.Join(xdg, "wt", "config.json")
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""

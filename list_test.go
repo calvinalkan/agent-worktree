@@ -34,7 +34,10 @@ func Test_List_Returns_Empty_When_No_Worktrees(t *testing.T) {
 	c := NewCLITester(t)
 	initRealGitRepo(t, c.Dir)
 
-	stdout, stderr, code := c.Run("list")
+	// Use local config to isolate from other tests
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	stdout, stderr, code := c.Run("--config", "config.json", "list")
 
 	if code != 0 {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
@@ -322,7 +325,10 @@ func Test_List_JSON_Empty_Returns_Empty_Array(t *testing.T) {
 	c := NewCLITester(t)
 	initRealGitRepo(t, c.Dir)
 
-	stdout, stderr, code := c.Run("list", "--json")
+	// Use local config to isolate from other tests
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	stdout, stderr, code := c.Run("--config", "config.json", "list", "--json")
 
 	if code != 0 {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
