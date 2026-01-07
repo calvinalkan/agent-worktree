@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -503,5 +504,161 @@ func Test_resolveWorktreeBaseDir_Relative_No_Repo_Name(t *testing.T) {
 
 	if got != want {
 		t.Errorf("resolveWorktreeBaseDir() = %q, want %q", got, want)
+	}
+}
+
+// E2E tests for configuration system
+
+func Test_Config_Creates_Worktree_Without_Repo_Name_When_Relative_Base_Path(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	// Use relative base path - worktrees should NOT include repo name in path
+	c.WriteFile(".wt/config.json", `{"base": "../sibling-wt"}`)
+
+	stdout, stderr, code := c.Run("create", "--name", "relative-test")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// Path should be <cwd>/../sibling-wt/relative-test (NO repo name)
+	AssertContains(t, stdout, "sibling-wt/relative-test")
+
+	// Verify the worktree directory was actually created at the correct location
+	siblingWtDir := filepath.Join(c.Dir, "..", "sibling-wt", "relative-test")
+	_, statErr := os.Stat(siblingWtDir)
+
+	if errors.Is(statErr, os.ErrNotExist) {
+		t.Errorf("worktree directory was not created at expected location: %s", siblingWtDir)
+	}
+
+	// Verify repo name is NOT in the path (for relative base)
+	repoName := filepath.Base(c.Dir)
+	AssertNotContains(t, stdout, filepath.Join("sibling-wt", repoName))
+}
+
+func Test_Config_Creates_Worktree_With_Repo_Name_When_Absolute_Base_Path(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	// Create a separate temp dir for worktrees (absolute path)
+	worktreeBase := t.TempDir()
+
+	// Use absolute base path - worktrees SHOULD include repo name in path
+	c.WriteFile(".wt/config.json", `{"base": "`+worktreeBase+`"}`)
+
+	stdout, stderr, code := c.Run("create", "--name", "absolute-test")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// Path should be <base>/<repo-name>/absolute-test
+	repoName := filepath.Base(c.Dir)
+	expectedPath := filepath.Join(worktreeBase, repoName, "absolute-test")
+
+	AssertContains(t, stdout, expectedPath)
+
+	// Verify the worktree directory was actually created at the correct location
+	_, statErr := os.Stat(expectedPath)
+
+	if errors.Is(statErr, os.ErrNotExist) {
+		t.Errorf("worktree directory was not created at expected location: %s", expectedPath)
+	}
+}
+
+func Test_Config_Creates_Worktree_With_Tilde_Expansion(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	// Get home directory for verification
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("cannot get home dir: %v", err)
+	}
+
+	// Use ~ in base path - should expand to home directory
+	c.WriteFile(".wt/config.json", `{"base": "~/test-worktrees-tilde"}`)
+
+	stdout, stderr, code := c.Run("create", "--name", "tilde-test")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// Path should contain expanded home directory
+	repoName := filepath.Base(c.Dir)
+	expectedPath := filepath.Join(home, "test-worktrees-tilde", repoName, "tilde-test")
+
+	AssertContains(t, stdout, expectedPath)
+
+	// Verify the worktree directory was actually created
+	_, statErr := os.Stat(expectedPath)
+
+	if errors.Is(statErr, os.ErrNotExist) {
+		t.Errorf("worktree directory was not created at expected location: %s", expectedPath)
+	}
+
+	// Cleanup - remove the test directory from home
+	_ = os.RemoveAll(filepath.Join(home, "test-worktrees-tilde"))
+}
+
+func Test_Config_Returns_Error_When_Explicit_Config_File_Has_Invalid_JSON(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	// Create invalid JSON config
+	c.WriteFile("bad.json", `{invalid json}`)
+
+	_, stderr, code := c.Run("--config", "bad.json", "list")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "parsing config")
+}
+
+func Test_Config_Uses_Defaults_When_Missing_Explicit_Config_File(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	// Reference a config file that doesn't exist - should use defaults (not error)
+	// Use list command to avoid creating branches that might conflict
+	_, stderr, code := c.Run("--config", "nonexistent.json", "list")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// The fact that list succeeds means defaults were loaded correctly
+	// (if config loading failed, we'd get exit code 1)
+}
+
+func Test_Config_List_Works_With_Tilde_In_Path(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	// Use ~ in base path for list command
+	c.WriteFile(".wt/config.json", `{"base": "~/test-worktrees-list"}`)
+
+	// List should succeed even with no worktrees
+	_, stderr, code := c.Run("list")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
 	}
 }
