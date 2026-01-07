@@ -24,14 +24,19 @@ func ListCmd(cfg Config, fsys fs.FS, git *Git) *Command {
 		Flags: flags,
 		Usage: "list [flags]",
 		Short: "List worktrees for current repo",
-		Long:  `List all worktrees managed by wt for the current repository.`,
+		Long: `List all worktrees managed by wt for the current repository.
+
+Only shows worktrees that have .wt/worktree.json metadata (created by wt).
+Output columns: NAME, PATH, CREATED (relative age).
+
+Use --json for machine-readable output suitable for scripting.`,
 		Exec: func(_ context.Context, stdin io.Reader, stdout, stderr io.Writer, _ []string) error {
 			return execList(stdin, stdout, stderr, cfg, fsys, git, flags)
 		},
 	}
 }
 
-func execList(_ io.Reader, stdout, _ io.Writer, cfg Config, fsys fs.FS, git *Git, flags *flag.FlagSet) error {
+func execList(_ io.Reader, stdout, stderr io.Writer, cfg Config, fsys fs.FS, git *Git, flags *flag.FlagSet) error {
 	jsonOutput, _ := flags.GetBool("json")
 
 	// Get main repo root (works from inside worktrees too)
@@ -53,7 +58,7 @@ func execList(_ io.Reader, stdout, _ io.Writer, cfg Config, fsys fs.FS, git *Git
 		return outputListJSON(stdout, worktrees)
 	}
 
-	return outputListTable(stdout, worktrees)
+	return outputListTable(stdout, stderr, worktrees)
 }
 
 // WorktreeWithPath combines WorktreeInfo with its filesystem path.
@@ -98,17 +103,19 @@ func findWorktreesWithPaths(fsys fs.FS, baseDir string) ([]WorktreeWithPath, err
 	return result, nil
 }
 
-func outputListTable(output io.Writer, worktrees []WorktreeWithPath) error {
+func outputListTable(stdout, stderr io.Writer, worktrees []WorktreeWithPath) error {
 	if len(worktrees) == 0 {
-		return nil // Empty output for no worktrees
+		fprintln(stderr, "No worktrees found. Create one with: wt create")
+
+		return nil
 	}
 
 	// Header
-	fprintf(output, "%-15s %-50s %s\n", "NAME", "PATH", "CREATED")
+	fprintf(stdout, "%-15s %-50s %s\n", "NAME", "PATH", "CREATED")
 
 	for _, wt := range worktrees {
 		age := formatAge(wt.Created)
-		fprintf(output, "%-15s %-50s %s\n", wt.Name, wt.Path, age)
+		fprintf(stdout, "%-15s %-50s %s\n", wt.Name, wt.Path, age)
 	}
 
 	return nil

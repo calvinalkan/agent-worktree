@@ -43,9 +43,60 @@ func Test_List_Returns_Empty_When_No_Worktrees(t *testing.T) {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
 	}
 
-	// Empty output for no worktrees
+	// Empty stdout for no worktrees
 	if strings.TrimSpace(stdout) != "" {
-		t.Errorf("expected empty output, got: %q", stdout)
+		t.Errorf("expected empty stdout, got: %q", stdout)
+	}
+
+	// Helpful message on stderr
+	AssertContains(t, stderr, "No worktrees found")
+	AssertContains(t, stderr, "wt create")
+}
+
+func Test_List_Help_Shows_Detailed_Description(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+
+	stdout, _, code := c.Run("list", "--help")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d", code)
+	}
+
+	// Verify description explains what is shown
+	AssertContains(t, stdout, ".wt/worktree.json")
+	AssertContains(t, stdout, "NAME")
+	AssertContains(t, stdout, "PATH")
+	AssertContains(t, stdout, "CREATED")
+
+	// Verify JSON mention
+	AssertContains(t, stdout, "--json")
+	AssertContains(t, stdout, "machine-readable")
+}
+
+func Test_List_JSON_Empty_Does_Not_Print_Message_To_Stderr(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	stdout, stderr, code := c.Run("--config", "config.json", "list", "--json")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// Should be valid JSON empty array
+	if strings.TrimSpace(stdout) != "[]" {
+		t.Errorf("expected '[]', got: %q", stdout)
+	}
+
+	// Should NOT print message to stderr in JSON mode
+	if strings.Contains(stderr, "No worktrees found") {
+		t.Errorf("should not print message in JSON mode, got stderr: %q", stderr)
 	}
 }
 
