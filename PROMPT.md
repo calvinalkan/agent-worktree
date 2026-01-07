@@ -3,6 +3,10 @@ Study @TECH_SPECH.md
 
 Run `tk ready` and pick the single highest priority task to work on.
 Start the work on the task by running `tk start <id>` to get detailed task information.
+
+Do not assume that something has been implemented, always compare
+the current state of the code with the specification.
+
 Implement the task, ensure all acceptance criteria are met, and all e2e tests are authored for new functionality.
 
 All functioanlity should have tests that erorr handling works as expected.

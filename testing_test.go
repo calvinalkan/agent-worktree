@@ -91,13 +91,15 @@ func (c *CLI) InitGitRepo() {
 
 	// Create minimal git repo
 	gitDir := filepath.Join(c.Dir, ".git")
-	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+	err := os.MkdirAll(gitDir, 0o750)
+	if err != nil {
 		c.t.Fatalf("failed to create .git dir: %v", err)
 	}
 
 	// Write minimal HEAD file
 	headPath := filepath.Join(gitDir, "HEAD")
-	if err := os.WriteFile(headPath, []byte("ref: refs/heads/main\n"), 0o644); err != nil {
+	err = os.WriteFile(headPath, []byte("ref: refs/heads/main\n"), 0o644)
+	if err != nil {
 		c.t.Fatalf("failed to write HEAD: %v", err)
 	}
 }
@@ -109,11 +111,13 @@ func (c *CLI) WriteFile(relPath, content string) {
 	path := filepath.Join(c.Dir, relPath)
 	dir := filepath.Dir(path)
 
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	err := os.MkdirAll(dir, 0o750)
+	if err != nil {
 		c.t.Fatalf("failed to create dir %s: %v", dir, err)
 	}
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	err = os.WriteFile(path, []byte(content), 0o644)
+	if err != nil {
 		c.t.Fatalf("failed to write file %s: %v", relPath, err)
 	}
 }
@@ -123,6 +127,7 @@ func (c *CLI) ReadFile(relPath string) string {
 	c.t.Helper()
 
 	path := filepath.Join(c.Dir, relPath)
+
 	content, err := os.ReadFile(path)
 	if err != nil {
 		c.t.Fatalf("failed to read file %s: %v", relPath, err)
@@ -135,6 +140,7 @@ func (c *CLI) ReadFile(relPath string) string {
 func (c *CLI) FileExists(relPath string) bool {
 	path := filepath.Join(c.Dir, relPath)
 	_, err := os.Stat(path)
+
 	return err == nil
 }
 

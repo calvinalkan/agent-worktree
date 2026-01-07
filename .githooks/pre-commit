@@ -1,0 +1,5 @@
+#!/bin/sh
+
+if [ -n "$AGENT" ]; then
+  make check
+fi
