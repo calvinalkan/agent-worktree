@@ -21,3 +21,5 @@ When you think you are done, run `make check` for comprehensive tests.
 
 Then, complete the task by running `tk close <id>`, and then commit your changes and the ticket itself with git.
 Use conventional commit messages, and reference the ticket in the first line of your commit message.
+
+Then tell the user what you acco
