@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -201,4 +202,38 @@ func Test_Info_Appears_In_Help_Output(t *testing.T) {
 	}
 
 	AssertContains(t, stdout, "info")
+}
+
+func Test_Info_Works_From_Subdirectory(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a worktree
+	_, stderr, code := c.Run("--config", "config.json", "create", "--name", "subdir-test-wt")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Create a subdirectory inside the worktree
+	wtPath := filepath.Join(c.Dir, "worktrees", "subdir-test-wt")
+	subDir := filepath.Join(wtPath, "src", "nested")
+
+	err := os.MkdirAll(subDir, 0o750)
+	if err != nil {
+		t.Fatalf("failed to create subdirectory: %v", err)
+	}
+
+	// Run info from inside the subdirectory
+	stdout, stderr, code := c.RunWithInput(nil, "--config", "../../../../config.json", "-C", subDir, "info")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	AssertContains(t, stdout, "name:        subdir-test-wt")
+	AssertContains(t, stdout, "base_branch: main")
 }

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
+	"path/filepath"
 
 	"github.com/calvinalkan/agent-task/pkg/fs"
 	flag "github.com/spf13/pflag"
@@ -56,27 +56,52 @@ func execInfo(
 		return ErrNotGitRepository
 	}
 
-	// Read worktree info from current directory
-	info, err := readWorktreeInfo(fsys, cfg.EffectiveCwd)
+	// Find worktree root (look for .wt/worktree.json walking up)
+	wtPath, err := findWorktreeRoot(fsys, cfg.EffectiveCwd)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return errNotInWorktree
-		}
+		return errNotInWorktree
+	}
 
+	// Read worktree metadata
+	info, err := readWorktreeInfo(fsys, wtPath)
+	if err != nil {
 		return fmt.Errorf("%w: %w", errWorktreeInfoNotFound, err)
 	}
 
 	// If --field is specified, output only that field
 	if field != "" {
-		return outputField(stdout, &info, cfg.EffectiveCwd, field)
+		return outputField(stdout, &info, wtPath, field)
 	}
 
 	// Full output
 	if jsonOutput {
-		return outputInfoJSON(stdout, &info, cfg.EffectiveCwd)
+		return outputInfoJSON(stdout, &info, wtPath)
 	}
 
-	return outputInfoText(stdout, &info, cfg.EffectiveCwd)
+	return outputInfoText(stdout, &info, wtPath)
+}
+
+// findWorktreeRoot walks up from startDir looking for .wt/worktree.json.
+// Returns the worktree root directory path or an error if not found.
+func findWorktreeRoot(fsys fs.FS, startDir string) (string, error) {
+	dir := startDir
+
+	for {
+		infoPath := filepath.Join(dir, ".wt", "worktree.json")
+
+		_, err := fsys.Stat(infoPath)
+		if err == nil {
+			return dir, nil
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached filesystem root
+			return "", errNotInWorktree
+		}
+
+		dir = parent
+	}
 }
 
 func outputField(stdout io.Writer, info *WorktreeInfo, path, field string) error {
