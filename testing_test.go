@@ -124,6 +124,25 @@ func (c *CLI) WriteFile(relPath, content string) {
 	}
 }
 
+// WriteExecutable writes an executable script to a file in the test directory.
+// Used for creating hook scripts that need to be executable.
+func (c *CLI) WriteExecutable(relPath, content string) {
+	c.t.Helper()
+
+	path := filepath.Join(c.Dir, relPath)
+	dir := filepath.Dir(path)
+
+	err := os.MkdirAll(dir, 0o750)
+	if err != nil {
+		c.t.Fatalf("failed to create dir %s: %v", dir, err)
+	}
+
+	err = os.WriteFile(path, []byte(content), 0o755)
+	if err != nil {
+		c.t.Fatalf("failed to write executable %s: %v", relPath, err)
+	}
+}
+
 // ReadFile reads content from a file in the test directory.
 func (c *CLI) ReadFile(relPath string) string {
 	c.t.Helper()

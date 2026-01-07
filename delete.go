@@ -12,7 +12,7 @@ import (
 var errWorktreeNameRequired = errors.New("worktree name is required")
 
 // DeleteCmd returns the delete command.
-func DeleteCmd(cfg Config, fsys fs.FS, git *Git) *Command {
+func DeleteCmd(cfg Config, fsys fs.FS, git *Git, env map[string]string) *Command {
 	flags := flag.NewFlagSet("delete", flag.ContinueOnError)
 	flags.BoolP("help", "h", false, "Show help")
 	flags.Bool("force", false, "Delete even if worktree has uncommitted changes")
@@ -27,12 +27,12 @@ func DeleteCmd(cfg Config, fsys fs.FS, git *Git) *Command {
 If the worktree has uncommitted changes, use --force to proceed.
 Use --with-branch to also delete the git branch.`,
 		Exec: func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, args []string) error {
-			return execDelete(ctx, stdin, stdout, stderr, cfg, fsys, git, flags, args)
+			return execDelete(ctx, stdin, stdout, stderr, cfg, fsys, git, env, flags, args)
 		},
 	}
 }
 
-func execDelete(_ context.Context, _ io.Reader, stdout, _ io.Writer, _ Config, _ fs.FS, _ *Git, flags *flag.FlagSet, args []string) error {
+func execDelete(_ context.Context, _ io.Reader, stdout, _ io.Writer, _ Config, _ fs.FS, _ *Git, _ map[string]string, flags *flag.FlagSet, args []string) error {
 	if len(args) == 0 {
 		return errWorktreeNameRequired
 	}

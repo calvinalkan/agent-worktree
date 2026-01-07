@@ -1,7 +1,9 @@
-#!/bin/sh
+#!/bin/bash
+
+set -e
 
 make modernize
 
-if [ -n "$AGENT" ]; then
-  make check
+if agent-sandbox check -q; then
+    make check
 fi

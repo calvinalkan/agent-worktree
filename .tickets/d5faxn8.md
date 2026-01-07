@@ -126,4 +126,4 @@ Could use atomic mkdir as a lock (it fails if dir exists). But:
 - Test that lock prevents concurrent ID assignment
 - Test timeout behavior
 - Test lock release on error
-- Could use parallel goroutines in test to verify safety
+- Use parallel goroutines in test to verify safety

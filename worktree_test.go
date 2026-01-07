@@ -11,6 +11,8 @@ import (
 	"github.com/calvinalkan/agent-task/pkg/fs"
 )
 
+const testBaseBranchMain = "main"
+
 func Test_writeWorktreeInfo_Creates_Wt_Directory_And_Json_File(t *testing.T) {
 	t.Parallel()
 
@@ -21,7 +23,7 @@ func Test_writeWorktreeInfo_Creates_Wt_Directory_And_Json_File(t *testing.T) {
 		Name:       "test-worktree",
 		AgentID:    "swift-fox",
 		ID:         42,
-		BaseBranch: "main",
+		BaseBranch: testBaseBranchMain,
 		Created:    time.Date(2025, 1, 7, 16, 30, 0, 0, time.UTC),
 	}
 
@@ -149,7 +151,7 @@ func Test_readWorktreeInfo_Reads_Valid_Json(t *testing.T) {
 		t.Errorf("expected id 99, got %d", info.ID)
 	}
 
-	if info.BaseBranch != "main" {
+	if info.BaseBranch != testBaseBranchMain {
 		t.Errorf("expected base_branch 'main', got %q", info.BaseBranch)
 	}
 
@@ -305,7 +307,7 @@ func Test_findWorktrees_Finds_Managed_Worktrees(t *testing.T) {
 		Name:       "wt-1",
 		AgentID:    "swift-fox",
 		ID:         1,
-		BaseBranch: "main",
+		BaseBranch: testBaseBranchMain,
 		Created:    time.Date(2025, 1, 5, 10, 0, 0, 0, time.UTC),
 	}
 
@@ -384,7 +386,7 @@ func Test_findWorktrees_Skips_Non_Managed_Directories(t *testing.T) {
 		Name:       "managed",
 		AgentID:    "calm-deer",
 		ID:         1,
-		BaseBranch: "main",
+		BaseBranch: testBaseBranchMain,
 		Created:    time.Now().UTC(),
 	}
 
@@ -455,7 +457,7 @@ func Test_findWorktrees_Handles_Mixed_Content(t *testing.T) {
 		Name:       "valid",
 		AgentID:    "keen-fox",
 		ID:         1,
-		BaseBranch: "main",
+		BaseBranch: testBaseBranchMain,
 		Created:    time.Now().UTC(),
 	}
 
@@ -505,7 +507,7 @@ func Test_writeWorktreeInfo_Returns_Error_When_Cannot_Create_Directory(t *testin
 		Name:       "test",
 		AgentID:    "test-id",
 		ID:         1,
-		BaseBranch: "main",
+		BaseBranch: testBaseBranchMain,
 		Created:    time.Now().UTC(),
 	}
 

@@ -61,9 +61,9 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 
 	// Create all commands
 	commands := []*Command{
-		CreateCmd(cfg, fsys, git),
+		CreateCmd(cfg, fsys, git, env),
 		ListCmd(cfg, fsys, git),
-		DeleteCmd(cfg, fsys, git),
+		DeleteCmd(cfg, fsys, git, env),
 	}
 
 	commandMap := make(map[string]*Command, len(commands))
@@ -223,6 +223,9 @@ func LoadConfig(fsys fs.FS, input LoadConfigInput) (Config, error) {
 
 			return cfg, nil
 		}
+	} else if !filepath.IsAbs(configPath) {
+		// Resolve relative config path against effective working directory
+		configPath = filepath.Join(workDir, configPath)
 	}
 
 	data, err := fsys.ReadFile(configPath)
