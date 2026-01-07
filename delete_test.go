@@ -316,6 +316,33 @@ func Test_Delete_Help_Shows_Usage_And_Flags(t *testing.T) {
 	AssertContains(t, stdout, "--with-branch")
 }
 
+func Test_Delete_Help_Shows_Detailed_Description(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+
+	stdout, _, code := c.Run("delete", "--help")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d", code)
+	}
+
+	// Verify description explains what gets deleted
+	AssertContains(t, stdout, "worktree directory and git worktree metadata")
+
+	// Verify interactive vs non-interactive explanation
+	AssertContains(t, stdout, "interactive terminal")
+	AssertContains(t, stdout, "prompted about branch deletion")
+	AssertContains(t, stdout, "non-interactive")
+
+	// Verify pre-delete hook mention
+	AssertContains(t, stdout, "pre-delete")
+	AssertContains(t, stdout, "abort")
+
+	// Verify improved flag description
+	AssertContains(t, stdout, "skips interactive prompt")
+}
+
 func Test_Delete_Interactive_Prompt_Yes_Deletes_Branch(t *testing.T) {
 	t.Parallel()
 

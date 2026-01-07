@@ -30,7 +30,7 @@ func DeleteCmd(cfg Config, fsys fs.FS, git *Git, env map[string]string) *Command
 	flags := flag.NewFlagSet("delete", flag.ContinueOnError)
 	flags.BoolP("help", "h", false, "Show help")
 	flags.Bool("force", false, "Delete even if worktree has uncommitted changes")
-	flags.Bool("with-branch", false, "Also delete the git branch")
+	flags.Bool("with-branch", false, "Delete the git branch (skips interactive prompt)")
 
 	return &Command{
 		Flags: flags,
@@ -38,8 +38,15 @@ func DeleteCmd(cfg Config, fsys fs.FS, git *Git, env map[string]string) *Command
 		Short: "Delete a worktree",
 		Long: `Delete a worktree by name.
 
-If the worktree has uncommitted changes, use --force to proceed.
-Use --with-branch to also delete the git branch.`,
+Removes the worktree directory and git worktree metadata. If the worktree
+has uncommitted changes, use --force to proceed.
+
+In an interactive terminal, you will be prompted about branch deletion.
+In non-interactive mode (scripts/pipes), the branch is kept unless
+--with-branch is specified.
+
+If .wt/hooks/pre-delete exists and is executable, it runs before deletion
+and can abort the operation by exiting non-zero.`,
 		Exec: func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, args []string) error {
 			return execDelete(ctx, stdin, stdout, stderr, cfg, fsys, git, env, flags, args)
 		},
