@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -17,7 +18,7 @@ import (
 
 // Run is the main entry point. Returns exit code.
 // sigCh can be nil if signal handling is not needed (e.g., in tests).
-func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, _ map[string]string, sigCh <-chan os.Signal) int {
+func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[string]string, sigCh <-chan os.Signal) int {
 	// Create fresh global flags for this invocation
 	globalFlags := flag.NewFlagSet("wt", flag.ContinueOnError)
 	globalFlags.SetInterspersed(false)
@@ -39,6 +40,14 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, _ map[string]
 	// Create filesystem abstraction
 	fsys := fs.NewReal()
 
+	// Create git with explicit environment for isolation
+	envSlice := make([]string, 0, len(env))
+	for k, v := range env {
+		envSlice = append(envSlice, k+"="+v)
+	}
+
+	git := NewGit(envSlice)
+
 	// Load config (handles --cwd resolution internally)
 	cfg, err := LoadConfig(fsys, LoadConfigInput{
 		WorkDirOverride: *flagCwd,
@@ -52,9 +61,9 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, _ map[string]
 
 	// Create all commands
 	commands := []*Command{
-		CreateCmd(cfg, fsys),
-		ListCmd(cfg, fsys),
-		DeleteCmd(cfg, fsys),
+		CreateCmd(cfg, fsys, git),
+		ListCmd(cfg, fsys, git),
+		DeleteCmd(cfg, fsys, git),
 	}
 
 	commandMap := make(map[string]*Command, len(commands))
@@ -283,4 +292,110 @@ func IsTerminal() bool {
 	}
 
 	return (stat.Mode() & os.ModeCharDevice) != 0
+}
+
+// WorktreeInfo holds metadata for a wt-managed worktree.
+// Stored in .wt/worktree.json within each worktree.
+type WorktreeInfo struct {
+	Name       string    `json:"name"`
+	AgentID    string    `json:"agent_id"`
+	ID         int       `json:"id"`
+	BaseBranch string    `json:"base_branch"`
+	Created    time.Time `json:"created"`
+}
+
+// writeWorktreeInfo writes metadata to .wt/worktree.json in the worktree.
+func writeWorktreeInfo(fsys fs.FS, wtPath string, info *WorktreeInfo) error {
+	wtDir := filepath.Join(wtPath, ".wt")
+
+	mkdirErr := fsys.MkdirAll(wtDir, 0o750)
+	if mkdirErr != nil {
+		return fmt.Errorf("creating .wt directory: %w", mkdirErr)
+	}
+
+	data, marshalErr := json.MarshalIndent(info, "", "  ")
+	if marshalErr != nil {
+		return fmt.Errorf("marshaling worktree info: %w", marshalErr)
+	}
+
+	infoPath := filepath.Join(wtDir, "worktree.json")
+
+	file, createErr := fsys.Create(infoPath)
+	if createErr != nil {
+		return fmt.Errorf("creating worktree.json: %w", createErr)
+	}
+
+	_, writeErr := file.Write(data)
+	if writeErr != nil {
+		_ = file.Close()
+
+		return fmt.Errorf("writing worktree.json: %w", writeErr)
+	}
+
+	syncErr := file.Sync()
+	if syncErr != nil {
+		_ = file.Close()
+
+		return fmt.Errorf("syncing worktree.json: %w", syncErr)
+	}
+
+	closeErr := file.Close()
+	if closeErr != nil {
+		return fmt.Errorf("closing worktree.json: %w", closeErr)
+	}
+
+	return nil
+}
+
+// readWorktreeInfo reads metadata from .wt/worktree.json in the worktree.
+// Returns os.ErrNotExist if the file doesn't exist.
+func readWorktreeInfo(fsys fs.FS, wtPath string) (WorktreeInfo, error) {
+	infoPath := filepath.Join(wtPath, ".wt", "worktree.json")
+
+	data, readErr := fsys.ReadFile(infoPath)
+	if readErr != nil {
+		return WorktreeInfo{}, fmt.Errorf("reading worktree.json: %w", readErr)
+	}
+
+	var info WorktreeInfo
+
+	unmarshalErr := json.Unmarshal(data, &info)
+	if unmarshalErr != nil {
+		return WorktreeInfo{}, fmt.Errorf("parsing worktree.json: %w", unmarshalErr)
+	}
+
+	return info, nil
+}
+
+// findWorktrees scans the given directory for wt-managed worktrees.
+// searchDir should be the directory containing worktree subdirectories.
+// Returns worktrees that have .wt/worktree.json files.
+func findWorktrees(fsys fs.FS, searchDir string) ([]WorktreeInfo, error) {
+	entries, readDirErr := fsys.ReadDir(searchDir)
+	if readDirErr != nil {
+		if errors.Is(readDirErr, os.ErrNotExist) {
+			return nil, nil // No worktrees yet
+		}
+
+		return nil, fmt.Errorf("reading worktree directory: %w", readDirErr)
+	}
+
+	worktrees := make([]WorktreeInfo, 0, len(entries))
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		wtPath := filepath.Join(searchDir, entry.Name())
+
+		info, readInfoErr := readWorktreeInfo(fsys, wtPath)
+		if readInfoErr != nil {
+			continue // Skip non-wt directories
+		}
+
+		worktrees = append(worktrees, info)
+	}
+
+	return worktrees, nil
 }

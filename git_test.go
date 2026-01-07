@@ -5,8 +5,59 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+// gitEnvVarsToFilter are environment variables that can interfere with git
+// operations when running tests inside a git hook (e.g., pre-commit).
+var gitEnvVarsToFilter = []string{
+	"GIT_DIR",
+	"GIT_WORK_TREE",
+	"GIT_INDEX_FILE",
+	"GIT_OBJECT_DIRECTORY",
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES",
+	"GIT_QUARANTINE_PATH",
+}
+
+// filterTestGitEnv removes git-specific variables that could interfere with test operations.
+func filterTestGitEnv(env []string) []string {
+	result := make([]string, 0, len(env))
+
+	for _, envVar := range env {
+		skip := false
+
+		for _, gitVar := range gitEnvVarsToFilter {
+			if strings.HasPrefix(envVar, gitVar+"=") {
+				skip = true
+
+				break
+			}
+		}
+
+		if !skip {
+			result = append(result, envVar)
+		}
+	}
+
+	return result
+}
+
+// newTestGit creates a Git instance with filtered environment for test isolation.
+// Filters out git-specific env vars so tests don't inherit GIT_INDEX_FILE etc.
+// from parent processes (e.g., pre-commit hooks).
+func newTestGit() *Git {
+	return NewGit(filterTestGitEnv(os.Environ()))
+}
+
+// testGitCmd creates a git command with filtered environment for test helpers.
+// Used by initRealGitRepo and other test setup that runs raw git commands.
+func testGitCmd(args ...string) *exec.Cmd {
+	cmd := exec.Command("git", args...)
+	cmd.Env = filterTestGitEnv(os.Environ())
+
+	return cmd
+}
 
 // writeTestFile writes content to a file for testing purposes.
 func writeTestFile(t *testing.T, path, content string) {
@@ -31,7 +82,7 @@ func initRealGitRepo(t *testing.T, dir string) string {
 	t.Helper()
 
 	// Initialize git repo with main as initial branch
-	cmd := exec.Command("git", "init", "--initial-branch=main")
+	cmd := testGitCmd("init", "--initial-branch=main")
 	cmd.Dir = dir
 
 	out, err := cmd.CombinedOutput()
@@ -40,7 +91,7 @@ func initRealGitRepo(t *testing.T, dir string) string {
 	}
 
 	// Configure git user for commits
-	cmd = exec.Command("git", "config", "user.email", "test@test.com")
+	cmd = testGitCmd("config", "user.email", "test@test.com")
 	cmd.Dir = dir
 
 	out, err = cmd.CombinedOutput()
@@ -48,7 +99,7 @@ func initRealGitRepo(t *testing.T, dir string) string {
 		t.Fatalf("git config email failed: %v\n%s", err, out)
 	}
 
-	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd = testGitCmd("config", "user.name", "Test User")
 	cmd.Dir = dir
 
 	out, err = cmd.CombinedOutput()
@@ -57,7 +108,7 @@ func initRealGitRepo(t *testing.T, dir string) string {
 	}
 
 	// Disable commit signing for tests
-	cmd = exec.Command("git", "config", "commit.gpgsign", "false")
+	cmd = testGitCmd("config", "commit.gpgsign", "false")
 	cmd.Dir = dir
 
 	out, err = cmd.CombinedOutput()
@@ -69,7 +120,7 @@ func initRealGitRepo(t *testing.T, dir string) string {
 	testFile := filepath.Join(dir, "README.md")
 	writeTestFile(t, testFile, "# Test\n")
 
-	cmd = exec.Command("git", "add", ".")
+	cmd = testGitCmd("add", ".")
 	cmd.Dir = dir
 
 	out, err = cmd.CombinedOutput()
@@ -77,7 +128,7 @@ func initRealGitRepo(t *testing.T, dir string) string {
 		t.Fatalf("git add failed: %v\n%s", err, out)
 	}
 
-	cmd = exec.Command("git", "commit", "-m", "initial commit")
+	cmd = testGitCmd("commit", "-m", "initial commit")
 	cmd.Dir = dir
 
 	out, err = cmd.CombinedOutput()
@@ -91,10 +142,12 @@ func initRealGitRepo(t *testing.T, dir string) string {
 func Test_gitRepoRoot_Returns_Root_When_In_Repo(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	repoPath := initRealGitRepo(t, dir)
 
-	root, err := gitRepoRoot(repoPath)
+	root, err := git.RepoRoot(repoPath)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -111,6 +164,8 @@ func Test_gitRepoRoot_Returns_Root_When_In_Repo(t *testing.T) {
 func Test_gitRepoRoot_Returns_Root_When_In_Subdir(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	repoPath := initRealGitRepo(t, dir)
 
@@ -122,7 +177,7 @@ func Test_gitRepoRoot_Returns_Root_When_In_Subdir(t *testing.T) {
 		t.Fatalf("failed to create subdir: %v", err)
 	}
 
-	root, err := gitRepoRoot(subdir)
+	root, err := git.RepoRoot(subdir)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -139,10 +194,12 @@ func Test_gitRepoRoot_Returns_Root_When_In_Subdir(t *testing.T) {
 func Test_gitRepoRoot_Returns_Error_When_Not_In_Repo(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	// Don't initialize git repo
 
-	_, err := gitRepoRoot(dir)
+	_, err := git.RepoRoot(dir)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -155,10 +212,12 @@ func Test_gitRepoRoot_Returns_Error_When_Not_In_Repo(t *testing.T) {
 func Test_gitCurrentBranch_Returns_Branch_Name(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	initRealGitRepo(t, dir)
 
-	branch, err := gitCurrentBranch(dir)
+	branch, err := git.CurrentBranch(dir)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -171,11 +230,13 @@ func Test_gitCurrentBranch_Returns_Branch_Name(t *testing.T) {
 func Test_gitCurrentBranch_Returns_Branch_After_Switch(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	initRealGitRepo(t, dir)
 
 	// Create and switch to new branch
-	cmd := exec.Command("git", "switch", "-c", "feature-test")
+	cmd := testGitCmd("switch", "-c", "feature-test")
 	cmd.Dir = dir
 
 	out, err := cmd.CombinedOutput()
@@ -183,7 +244,7 @@ func Test_gitCurrentBranch_Returns_Branch_After_Switch(t *testing.T) {
 		t.Fatalf("git switch -c failed: %v\n%s", err, out)
 	}
 
-	branch, err := gitCurrentBranch(dir)
+	branch, err := git.CurrentBranch(dir)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -196,10 +257,12 @@ func Test_gitCurrentBranch_Returns_Branch_After_Switch(t *testing.T) {
 func Test_gitIsDirty_Returns_False_When_Clean(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	initRealGitRepo(t, dir)
 
-	dirty, err := gitIsDirty(dir)
+	dirty, err := git.IsDirty(dir)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -212,6 +275,8 @@ func Test_gitIsDirty_Returns_False_When_Clean(t *testing.T) {
 func Test_gitIsDirty_Returns_True_When_Modified(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	initRealGitRepo(t, dir)
 
@@ -219,7 +284,7 @@ func Test_gitIsDirty_Returns_True_When_Modified(t *testing.T) {
 	testFile := filepath.Join(dir, "README.md")
 	writeTestFile(t, testFile, "# Modified\n")
 
-	dirty, err := gitIsDirty(dir)
+	dirty, err := git.IsDirty(dir)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -232,6 +297,8 @@ func Test_gitIsDirty_Returns_True_When_Modified(t *testing.T) {
 func Test_gitIsDirty_Returns_True_When_Untracked(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	initRealGitRepo(t, dir)
 
@@ -239,7 +306,7 @@ func Test_gitIsDirty_Returns_True_When_Untracked(t *testing.T) {
 	newFile := filepath.Join(dir, "new-file.txt")
 	writeTestFile(t, newFile, "new content\n")
 
-	dirty, err := gitIsDirty(dir)
+	dirty, err := git.IsDirty(dir)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -252,11 +319,13 @@ func Test_gitIsDirty_Returns_True_When_Untracked(t *testing.T) {
 func Test_gitWorktreeAdd_Creates_Worktree(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	repoPath := initRealGitRepo(t, dir)
 	wtPath := filepath.Join(dir, "worktree-test")
 
-	err := gitWorktreeAdd(repoPath, wtPath, "feature-branch", "main")
+	err := git.WorktreeAdd(repoPath, wtPath, "feature-branch", "main")
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -267,7 +336,7 @@ func Test_gitWorktreeAdd_Creates_Worktree(t *testing.T) {
 	}
 
 	// Verify branch was created
-	branch, err := gitCurrentBranch(wtPath)
+	branch, err := git.CurrentBranch(wtPath)
 	if err != nil {
 		t.Fatalf("failed to get branch: %v", err)
 	}
@@ -280,12 +349,14 @@ func Test_gitWorktreeAdd_Creates_Worktree(t *testing.T) {
 func Test_gitWorktreeAdd_Returns_Error_When_Branch_Exists(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	repoPath := initRealGitRepo(t, dir)
 	wtPath := filepath.Join(dir, "worktree-test")
 
 	// First create should succeed
-	err := gitWorktreeAdd(repoPath, wtPath, "feature-branch", "main")
+	err := git.WorktreeAdd(repoPath, wtPath, "feature-branch", "main")
 	if err != nil {
 		t.Fatalf("first worktree add failed: %v", err)
 	}
@@ -293,7 +364,7 @@ func Test_gitWorktreeAdd_Returns_Error_When_Branch_Exists(t *testing.T) {
 	// Second create with same branch should fail
 	wtPath2 := filepath.Join(dir, "worktree-test-2")
 
-	err = gitWorktreeAdd(repoPath, wtPath2, "feature-branch", "main")
+	err = git.WorktreeAdd(repoPath, wtPath2, "feature-branch", "main")
 	if err == nil {
 		t.Error("expected error for duplicate branch, got nil")
 	}
@@ -302,11 +373,13 @@ func Test_gitWorktreeAdd_Returns_Error_When_Branch_Exists(t *testing.T) {
 func Test_gitWorktreeAdd_Creates_Worktree_From_Different_Branch(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	repoPath := initRealGitRepo(t, dir)
 
 	// Create a develop branch
-	cmd := exec.Command("git", "branch", "develop")
+	cmd := testGitCmd("branch", "develop")
 	cmd.Dir = repoPath
 
 	out, err := cmd.CombinedOutput()
@@ -317,7 +390,7 @@ func Test_gitWorktreeAdd_Creates_Worktree_From_Different_Branch(t *testing.T) {
 	wtPath := filepath.Join(dir, "worktree-test")
 
 	// Create worktree from develop branch
-	err = gitWorktreeAdd(repoPath, wtPath, "feature-from-develop", "develop")
+	err = git.WorktreeAdd(repoPath, wtPath, "feature-from-develop", "develop")
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -331,18 +404,20 @@ func Test_gitWorktreeAdd_Creates_Worktree_From_Different_Branch(t *testing.T) {
 func Test_gitWorktreeRemove_Removes_Worktree(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	repoPath := initRealGitRepo(t, dir)
 	wtPath := filepath.Join(dir, "worktree-test")
 
 	// Create worktree first
-	err := gitWorktreeAdd(repoPath, wtPath, "feature-branch", "main")
+	err := git.WorktreeAdd(repoPath, wtPath, "feature-branch", "main")
 	if err != nil {
 		t.Fatalf("worktree add failed: %v", err)
 	}
 
 	// Remove worktree
-	err = gitWorktreeRemove(repoPath, wtPath, false)
+	err = git.WorktreeRemove(repoPath, wtPath, false)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -356,12 +431,14 @@ func Test_gitWorktreeRemove_Removes_Worktree(t *testing.T) {
 func Test_gitWorktreeRemove_Returns_Error_When_Dirty_Without_Force(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	repoPath := initRealGitRepo(t, dir)
 	wtPath := filepath.Join(dir, "worktree-test")
 
 	// Create worktree
-	err := gitWorktreeAdd(repoPath, wtPath, "feature-branch", "main")
+	err := git.WorktreeAdd(repoPath, wtPath, "feature-branch", "main")
 	if err != nil {
 		t.Fatalf("worktree add failed: %v", err)
 	}
@@ -371,7 +448,7 @@ func Test_gitWorktreeRemove_Returns_Error_When_Dirty_Without_Force(t *testing.T)
 	writeTestFile(t, newFile, "dirty\n")
 
 	// Try to remove without force - should fail
-	err = gitWorktreeRemove(repoPath, wtPath, false)
+	err = git.WorktreeRemove(repoPath, wtPath, false)
 	if err == nil {
 		t.Error("expected error for dirty worktree, got nil")
 	}
@@ -380,12 +457,14 @@ func Test_gitWorktreeRemove_Returns_Error_When_Dirty_Without_Force(t *testing.T)
 func Test_gitWorktreeRemove_Removes_Dirty_Worktree_With_Force(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	repoPath := initRealGitRepo(t, dir)
 	wtPath := filepath.Join(dir, "worktree-test")
 
 	// Create worktree
-	err := gitWorktreeAdd(repoPath, wtPath, "feature-branch", "main")
+	err := git.WorktreeAdd(repoPath, wtPath, "feature-branch", "main")
 	if err != nil {
 		t.Fatalf("worktree add failed: %v", err)
 	}
@@ -395,7 +474,7 @@ func Test_gitWorktreeRemove_Removes_Dirty_Worktree_With_Force(t *testing.T) {
 	writeTestFile(t, newFile, "dirty\n")
 
 	// Remove with force - should succeed
-	err = gitWorktreeRemove(repoPath, wtPath, true)
+	err = git.WorktreeRemove(repoPath, wtPath, true)
 	if err != nil {
 		t.Fatalf("expected no error with force, got: %v", err)
 	}
@@ -404,10 +483,12 @@ func Test_gitWorktreeRemove_Removes_Dirty_Worktree_With_Force(t *testing.T) {
 func Test_gitWorktreePrune_Succeeds(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	repoPath := initRealGitRepo(t, dir)
 
-	err := gitWorktreePrune(repoPath)
+	err := git.WorktreePrune(repoPath)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -416,11 +497,13 @@ func Test_gitWorktreePrune_Succeeds(t *testing.T) {
 func Test_gitBranchDelete_Deletes_Branch(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	repoPath := initRealGitRepo(t, dir)
 
 	// Create a branch
-	cmd := exec.Command("git", "branch", "feature-to-delete")
+	cmd := testGitCmd("branch", "feature-to-delete")
 	cmd.Dir = repoPath
 
 	out, err := cmd.CombinedOutput()
@@ -429,13 +512,13 @@ func Test_gitBranchDelete_Deletes_Branch(t *testing.T) {
 	}
 
 	// Delete the branch
-	err = gitBranchDelete(repoPath, "feature-to-delete", false)
+	err = git.BranchDelete(repoPath, "feature-to-delete", false)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
 	// Verify branch was deleted
-	cmd = exec.Command("git", "branch", "--list", "feature-to-delete")
+	cmd = testGitCmd("branch", "--list", "feature-to-delete")
 	cmd.Dir = repoPath
 	out, _ = cmd.Output()
 
@@ -447,11 +530,13 @@ func Test_gitBranchDelete_Deletes_Branch(t *testing.T) {
 func Test_gitBranchDelete_Returns_Error_When_Branch_Not_Merged(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	repoPath := initRealGitRepo(t, dir)
 
 	// Create and switch to a branch
-	cmd := exec.Command("git", "switch", "-c", "unmerged-branch")
+	cmd := testGitCmd("switch", "-c", "unmerged-branch")
 	cmd.Dir = repoPath
 
 	out, err := cmd.CombinedOutput()
@@ -463,7 +548,7 @@ func Test_gitBranchDelete_Returns_Error_When_Branch_Not_Merged(t *testing.T) {
 	testFile := filepath.Join(repoPath, "new-file.txt")
 	writeTestFile(t, testFile, "new content\n")
 
-	cmd = exec.Command("git", "add", ".")
+	cmd = testGitCmd("add", ".")
 	cmd.Dir = repoPath
 
 	out, err = cmd.CombinedOutput()
@@ -471,7 +556,7 @@ func Test_gitBranchDelete_Returns_Error_When_Branch_Not_Merged(t *testing.T) {
 		t.Fatalf("git add failed: %v\n%s", err, out)
 	}
 
-	cmd = exec.Command("git", "commit", "-m", "new commit")
+	cmd = testGitCmd("commit", "-m", "new commit")
 	cmd.Dir = repoPath
 
 	out, err = cmd.CombinedOutput()
@@ -480,7 +565,7 @@ func Test_gitBranchDelete_Returns_Error_When_Branch_Not_Merged(t *testing.T) {
 	}
 
 	// Go back to main
-	cmd = exec.Command("git", "switch", "main")
+	cmd = testGitCmd("switch", "main")
 	cmd.Dir = repoPath
 
 	out, err = cmd.CombinedOutput()
@@ -489,7 +574,7 @@ func Test_gitBranchDelete_Returns_Error_When_Branch_Not_Merged(t *testing.T) {
 	}
 
 	// Try to delete unmerged branch without force - should fail
-	err = gitBranchDelete(repoPath, "unmerged-branch", false)
+	err = git.BranchDelete(repoPath, "unmerged-branch", false)
 	if err == nil {
 		t.Error("expected error for unmerged branch, got nil")
 	}
@@ -498,11 +583,13 @@ func Test_gitBranchDelete_Returns_Error_When_Branch_Not_Merged(t *testing.T) {
 func Test_gitBranchDelete_Force_Deletes_Unmerged_Branch(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	repoPath := initRealGitRepo(t, dir)
 
 	// Create and switch to a branch
-	cmd := exec.Command("git", "switch", "-c", "unmerged-branch")
+	cmd := testGitCmd("switch", "-c", "unmerged-branch")
 	cmd.Dir = repoPath
 
 	out, err := cmd.CombinedOutput()
@@ -514,7 +601,7 @@ func Test_gitBranchDelete_Force_Deletes_Unmerged_Branch(t *testing.T) {
 	testFile := filepath.Join(repoPath, "new-file.txt")
 	writeTestFile(t, testFile, "new content\n")
 
-	cmd = exec.Command("git", "add", ".")
+	cmd = testGitCmd("add", ".")
 	cmd.Dir = repoPath
 
 	out, err = cmd.CombinedOutput()
@@ -522,7 +609,7 @@ func Test_gitBranchDelete_Force_Deletes_Unmerged_Branch(t *testing.T) {
 		t.Fatalf("git add failed: %v\n%s", err, out)
 	}
 
-	cmd = exec.Command("git", "commit", "-m", "new commit")
+	cmd = testGitCmd("commit", "-m", "new commit")
 	cmd.Dir = repoPath
 
 	out, err = cmd.CombinedOutput()
@@ -531,7 +618,7 @@ func Test_gitBranchDelete_Force_Deletes_Unmerged_Branch(t *testing.T) {
 	}
 
 	// Go back to main
-	cmd = exec.Command("git", "switch", "main")
+	cmd = testGitCmd("switch", "main")
 	cmd.Dir = repoPath
 
 	out, err = cmd.CombinedOutput()
@@ -540,7 +627,7 @@ func Test_gitBranchDelete_Force_Deletes_Unmerged_Branch(t *testing.T) {
 	}
 
 	// Force delete unmerged branch - should succeed
-	err = gitBranchDelete(repoPath, "unmerged-branch", true)
+	err = git.BranchDelete(repoPath, "unmerged-branch", true)
 	if err != nil {
 		t.Fatalf("expected no error with force, got: %v", err)
 	}
@@ -549,11 +636,13 @@ func Test_gitBranchDelete_Force_Deletes_Unmerged_Branch(t *testing.T) {
 func Test_gitWorktreeList_Returns_Worktree_Paths(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	repoPath := initRealGitRepo(t, dir)
 
 	// Initially should have just the main worktree
-	paths, err := gitWorktreeList(repoPath)
+	paths, err := git.WorktreeList(repoPath)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -565,13 +654,13 @@ func Test_gitWorktreeList_Returns_Worktree_Paths(t *testing.T) {
 	// Add a worktree
 	wtPath := filepath.Join(dir, "worktree-1")
 
-	err = gitWorktreeAdd(repoPath, wtPath, "branch-1", "main")
+	err = git.WorktreeAdd(repoPath, wtPath, "branch-1", "main")
 	if err != nil {
 		t.Fatalf("worktree add failed: %v", err)
 	}
 
 	// Now should have 2 worktrees
-	paths, err = gitWorktreeList(repoPath)
+	paths, err = git.WorktreeList(repoPath)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -584,16 +673,18 @@ func Test_gitWorktreeList_Returns_Worktree_Paths(t *testing.T) {
 func Test_gitWorktreeList_Includes_Worktree_Path(t *testing.T) {
 	t.Parallel()
 
+	git := newTestGit()
+
 	dir := t.TempDir()
 	repoPath := initRealGitRepo(t, dir)
 	wtPath := filepath.Join(dir, "my-worktree")
 
-	err := gitWorktreeAdd(repoPath, wtPath, "my-branch", "main")
+	err := git.WorktreeAdd(repoPath, wtPath, "my-branch", "main")
 	if err != nil {
 		t.Fatalf("worktree add failed: %v", err)
 	}
 
-	paths, err := gitWorktreeList(repoPath)
+	paths, err := git.WorktreeList(repoPath)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}

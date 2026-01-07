@@ -9,7 +9,7 @@ import (
 )
 
 // CreateCmd returns the create command.
-func CreateCmd(cfg Config, fsys fs.FS) *Command {
+func CreateCmd(cfg Config, fsys fs.FS, git *Git) *Command {
 	flags := flag.NewFlagSet("create", flag.ContinueOnError)
 	flags.BoolP("help", "h", false, "Show help")
 	flags.StringP("name", "n", "", "Custom worktree name")
@@ -25,12 +25,12 @@ func CreateCmd(cfg Config, fsys fs.FS) *Command {
 A random agent_id is generated (e.g., swift-fox) and used as the default
 worktree name. Use --name to override.`,
 		Exec: func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, _ []string) error {
-			return execCreate(ctx, stdin, stdout, stderr, cfg, fsys, flags)
+			return execCreate(ctx, stdin, stdout, stderr, cfg, fsys, git, flags)
 		},
 	}
 }
 
-func execCreate(_ context.Context, _ io.Reader, stdout, _ io.Writer, _ Config, _ fs.FS, flags *flag.FlagSet) error {
+func execCreate(_ context.Context, _ io.Reader, stdout, _ io.Writer, _ Config, _ fs.FS, _ *Git, flags *flag.FlagSet) error {
 	name, _ := flags.GetString("name")
 	fromBranch, _ := flags.GetString("from-branch")
 	copyChanges, _ := flags.GetBool("copy-changes")

@@ -9,7 +9,7 @@ import (
 )
 
 // ListCmd returns the list command.
-func ListCmd(cfg Config, fsys fs.FS) *Command {
+func ListCmd(cfg Config, fsys fs.FS, git *Git) *Command {
 	flags := flag.NewFlagSet("list", flag.ContinueOnError)
 	flags.BoolP("help", "h", false, "Show help")
 	flags.Bool("json", false, "Output as JSON")
@@ -20,12 +20,12 @@ func ListCmd(cfg Config, fsys fs.FS) *Command {
 		Short: "List worktrees for current repo",
 		Long:  `List all worktrees managed by wt for the current repository.`,
 		Exec: func(_ context.Context, stdin io.Reader, stdout, stderr io.Writer, _ []string) error {
-			return execList(stdin, stdout, stderr, cfg, fsys, flags)
+			return execList(stdin, stdout, stderr, cfg, fsys, git, flags)
 		},
 	}
 }
 
-func execList(_ io.Reader, stdout, _ io.Writer, _ Config, _ fs.FS, flags *flag.FlagSet) error {
+func execList(_ io.Reader, stdout, _ io.Writer, _ Config, _ fs.FS, _ *Git, flags *flag.FlagSet) error {
 	jsonOutput, _ := flags.GetBool("json")
 
 	// Stub - implementation pending.
