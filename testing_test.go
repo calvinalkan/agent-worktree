@@ -29,6 +29,18 @@ func NewCLITester(t *testing.T) *CLI {
 	}
 }
 
+// NewCLITesterAt creates a CLI tester that runs from a specific directory.
+// Useful for testing commands that need to run from within a worktree.
+func NewCLITesterAt(t *testing.T, dir string) *CLI {
+	t.Helper()
+
+	return &CLI{
+		t:   t,
+		Dir: dir,
+		Env: map[string]string{},
+	}
+}
+
 // Run executes the CLI with the given args and returns stdout, stderr, and exit code.
 // Args should not include "wt" or "--cwd" - those are added automatically.
 func (c *CLI) Run(args ...string) (string, string, int) {

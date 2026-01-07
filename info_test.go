@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -236,4 +237,132 @@ func Test_Info_Works_From_Subdirectory(t *testing.T) {
 
 	AssertContains(t, stdout, "name:        subdir-test-wt")
 	AssertContains(t, stdout, "base_branch: master")
+}
+
+func Test_Info_Field_AgentID_Returns_Value(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a worktree
+	stdout, stderr, code := c.Run("--config", "config.json", "create", "--name", "agentid-field-wt")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	wtPath := extractPath(stdout)
+	c2 := NewCLITesterAt(t, wtPath)
+
+	fieldStdout, stderr, code := c2.RunWithInput(nil, "--config", "../config.json", "info", "--field", "agent_id")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// agent_id should be in adjective-animal format
+	output := strings.TrimSpace(fieldStdout)
+	if !strings.Contains(output, "-") || len(output) < 3 {
+		t.Errorf("expected agent_id in adjective-animal format, got %q", output)
+	}
+}
+
+func Test_Info_Field_Path_Returns_Value(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a worktree
+	stdout, stderr, code := c.Run("--config", "config.json", "create", "--name", "path-field-wt")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	wtPath := extractPath(stdout)
+	c2 := NewCLITesterAt(t, wtPath)
+
+	fieldStdout, stderr, code := c2.RunWithInput(nil, "--config", "../config.json", "info", "--field", "path")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// path should contain the worktree name
+	output := strings.TrimSpace(fieldStdout)
+	if !strings.Contains(output, "path-field-wt") {
+		t.Errorf("expected path to contain 'path-field-wt', got %q", output)
+	}
+}
+
+func Test_Info_Field_Created_Returns_Timestamp(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a worktree
+	stdout, stderr, code := c.Run("--config", "config.json", "create", "--name", "created-field-wt")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	wtPath := extractPath(stdout)
+	c2 := NewCLITesterAt(t, wtPath)
+
+	fieldStdout, stderr, code := c2.RunWithInput(nil, "--config", "../config.json", "info", "--field", "created")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// created should be in ISO 8601 format
+	output := strings.TrimSpace(fieldStdout)
+	if !strings.Contains(output, "T") || !strings.HasSuffix(output, "Z") {
+		t.Errorf("expected created in ISO 8601 format (e.g. 2025-01-07T16:30:00Z), got %q", output)
+	}
+}
+
+func Test_Info_Using_ExtractPath_And_NewCLITesterAt(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a worktree and extract path using helper
+	stdout, stderr, code := c.Run("--config", "config.json", "create", "--name", "helpers-test-wt")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Use extractPath helper
+	wtPath := extractPath(stdout)
+	if wtPath == "" {
+		t.Fatal("extractPath returned empty string")
+	}
+
+	// Use NewCLITesterAt helper
+	c2 := NewCLITesterAt(t, wtPath)
+
+	infoStdout, stderr, code := c2.RunWithInput(nil, "--config", "../config.json", "info")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	AssertContains(t, infoStdout, "name:        helpers-test-wt")
+
+	// Also verify extractField works with info output
+	name := extractField(infoStdout, "name")
+	if name != "helpers-test-wt" {
+		t.Errorf("extractField(name) = %q, want %q", name, "helpers-test-wt")
+	}
 }
