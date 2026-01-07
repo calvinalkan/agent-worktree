@@ -49,6 +49,24 @@ func Test_Run_Shows_Help_When_H_Flag(t *testing.T) {
 	AssertContains(t, stdout, "Commands:")
 }
 
+func Test_Run_Global_Help_Shows_Description_And_Footer(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	stdout, _, code := c.Run("--help")
+
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+
+	// Verify description is present
+	AssertContains(t, stdout, "Manages isolated git worktrees with auto-generated names, lifecycle hooks,")
+	AssertContains(t, stdout, "and metadata tracking. Each worktree gets its own branch and directory.")
+
+	// Verify footer hint is present
+	AssertContains(t, stdout, "Run 'wt <command> --help' for more information on a command.")
+}
+
 func Test_Run_Shows_Version_When_Version_Flag(t *testing.T) {
 	t.Parallel()
 

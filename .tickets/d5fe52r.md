@@ -1,7 +1,8 @@
 ---
 schema_version: 1
 id: d5fe52r
-status: open
+status: closed
+closed: 2026-01-07T22:57:11Z
 blocked-by: []
 created: 2026-01-07T22:47:39Z
 type: chore

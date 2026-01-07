@@ -176,6 +176,9 @@ func printGlobalOptions(output io.Writer) {
 func printUsage(output io.Writer, commands []*Command) {
 	fprintln(output, "wt - git worktree manager")
 	fprintln(output)
+	fprintln(output, "Manages isolated git worktrees with auto-generated names, lifecycle hooks,")
+	fprintln(output, "and metadata tracking. Each worktree gets its own branch and directory.")
+	fprintln(output)
 	fprintln(output, "Usage: wt [flags] <command> [args]")
 	fprintln(output)
 	fprintln(output, "Flags:")
@@ -186,6 +189,9 @@ func printUsage(output io.Writer, commands []*Command) {
 	for _, cmd := range commands {
 		fprintln(output, cmd.HelpLine())
 	}
+
+	fprintln(output)
+	fprintln(output, "Run 'wt <command> --help' for more information on a command.")
 }
 
 // Config holds the application configuration.
