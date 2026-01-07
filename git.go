@@ -148,6 +148,68 @@ func (g *Git) WorktreeList(repoRoot string) ([]string, error) {
 	return paths, nil
 }
 
+// ChangedFiles returns all uncommitted files: staged, unstaged, and untracked.
+// Untracked files respect .gitignore.
+// Returns relative paths from the repository root.
+func (g *Git) ChangedFiles(cwd string) ([]string, error) {
+	files := make(map[string]struct{})
+
+	// Get staged and unstaged changes compared to HEAD
+	cmd := g.newCmd("-C", cwd, "diff", "--name-only", "HEAD")
+
+	out, err := cmd.Output()
+	if err != nil {
+		// HEAD might not exist (initial commit), try without HEAD
+		cmd = g.newCmd("-C", cwd, "diff", "--name-only")
+
+		out, err = cmd.Output()
+		if err != nil {
+			return nil, fmt.Errorf("getting diff: %w", err)
+		}
+	}
+
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			files[line] = struct{}{}
+		}
+	}
+
+	// Get staged files (in case some are only staged, not yet in HEAD)
+	cmd = g.newCmd("-C", cwd, "diff", "--cached", "--name-only")
+
+	out, err = cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("getting staged diff: %w", err)
+	}
+
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			files[line] = struct{}{}
+		}
+	}
+
+	// Get untracked files (respecting .gitignore)
+	cmd = g.newCmd("-C", cwd, "ls-files", "--others", "--exclude-standard")
+
+	out, err = cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("listing untracked files: %w", err)
+	}
+
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			files[line] = struct{}{}
+		}
+	}
+
+	result := make([]string, 0, len(files))
+	for f := range files {
+		result = append(result, f)
+	}
+
+	return result, nil
+}
+
 // newCmd creates an exec.Cmd for git with the configured environment.
 func (g *Git) newCmd(args ...string) *exec.Cmd {
 	cmd := exec.Command("git", args...)

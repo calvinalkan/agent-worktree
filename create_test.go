@@ -706,6 +706,273 @@ func Test_Create_JSON_Metadata_Is_Valid(t *testing.T) {
 	}
 }
 
+// Tests for --with-changes flag
+
+func Test_Create_With_Changes_Copies_Modified_Tracked_File(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Modify an existing tracked file
+	cli.WriteFile("README.md", "# Modified content\n")
+
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "--with-changes", "--name", "wt-modified")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	AssertContains(t, stdout, "Created worktree:")
+
+	// Verify the modified file was copied
+	copiedContent := cli.ReadFile(filepath.Join("worktrees", "wt-modified", "README.md"))
+	if copiedContent != "# Modified content\n" {
+		t.Errorf("expected modified content, got: %q", copiedContent)
+	}
+}
+
+func Test_Create_With_Changes_Copies_Untracked_File(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a new untracked file
+	cli.WriteFile("new-file.txt", "new untracked content\n")
+
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "--with-changes", "--name", "wt-untracked")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	AssertContains(t, stdout, "Created worktree:")
+
+	// Verify the untracked file was copied
+	copiedContent := cli.ReadFile(filepath.Join("worktrees", "wt-untracked", "new-file.txt"))
+	if copiedContent != "new untracked content\n" {
+		t.Errorf("expected untracked content, got: %q", copiedContent)
+	}
+}
+
+func Test_Create_With_Changes_Copies_Staged_File(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create and stage a new file
+	cli.WriteFile("staged-file.txt", "staged content\n")
+
+	cmd := testGitCmd("add", "staged-file.txt")
+	cmd.Dir = cli.Dir
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to stage file: %v\n%s", err, out)
+	}
+
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "--with-changes", "--name", "wt-staged")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	AssertContains(t, stdout, "Created worktree:")
+
+	// Verify the staged file was copied
+	copiedContent := cli.ReadFile(filepath.Join("worktrees", "wt-staged", "staged-file.txt"))
+	if copiedContent != "staged content\n" {
+		t.Errorf("expected staged content, got: %q", copiedContent)
+	}
+}
+
+func Test_Create_With_Changes_Respects_Gitignore(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a .gitignore and commit it
+	cli.WriteFile(".gitignore", "*.log\nignored-dir/\n")
+
+	cmd := testGitCmd("add", ".gitignore")
+	cmd.Dir = cli.Dir
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to add .gitignore: %v\n%s", err, out)
+	}
+
+	cmd = testGitCmd("commit", "-m", "add gitignore")
+	cmd.Dir = cli.Dir
+
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to commit .gitignore: %v\n%s", err, out)
+	}
+
+	// Create ignored files
+	cli.WriteFile("debug.log", "debug log content\n")
+	cli.WriteFile("ignored-dir/secret.txt", "secret content\n")
+
+	// Create a non-ignored untracked file
+	cli.WriteFile("should-copy.txt", "this should be copied\n")
+
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--with-changes", "--name", "wt-gitignore")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// Verify ignored files were NOT copied
+	if cli.FileExists(filepath.Join("worktrees", "wt-gitignore", "debug.log")) {
+		t.Error("debug.log should not have been copied (gitignored)")
+	}
+
+	if cli.FileExists(filepath.Join("worktrees", "wt-gitignore", "ignored-dir", "secret.txt")) {
+		t.Error("ignored-dir/secret.txt should not have been copied (gitignored)")
+	}
+
+	// Verify non-ignored file WAS copied
+	copiedContent := cli.ReadFile(filepath.Join("worktrees", "wt-gitignore", "should-copy.txt"))
+	if copiedContent != "this should be copied\n" {
+		t.Errorf("expected non-ignored content, got: %q", copiedContent)
+	}
+}
+
+func Test_Create_With_Changes_Copies_Nested_Directory_Structure(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create nested directory structure with untracked files
+	cli.WriteFile("src/pkg/main.go", "package main\n")
+	cli.WriteFile("src/pkg/util/helper.go", "package util\n")
+	cli.WriteFile("docs/readme.md", "# Docs\n")
+
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--with-changes", "--name", "wt-nested")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// Verify all nested files were copied with correct structure
+	content1 := cli.ReadFile(filepath.Join("worktrees", "wt-nested", "src", "pkg", "main.go"))
+	if content1 != "package main\n" {
+		t.Errorf("expected main.go content, got: %q", content1)
+	}
+
+	content2 := cli.ReadFile(filepath.Join("worktrees", "wt-nested", "src", "pkg", "util", "helper.go"))
+	if content2 != "package util\n" {
+		t.Errorf("expected helper.go content, got: %q", content2)
+	}
+
+	content3 := cli.ReadFile(filepath.Join("worktrees", "wt-nested", "docs", "readme.md"))
+	if content3 != "# Docs\n" {
+		t.Errorf("expected readme.md content, got: %q", content3)
+	}
+}
+
+func Test_Create_With_Changes_Copies_Both_Staged_And_Unstaged(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create and stage a file
+	cli.WriteFile("staged.txt", "staged\n")
+
+	cmd := testGitCmd("add", "staged.txt")
+	cmd.Dir = cli.Dir
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to stage file: %v\n%s", err, out)
+	}
+
+	// Create an unstaged modification to tracked file
+	cli.WriteFile("README.md", "unstaged modification\n")
+
+	// Create an untracked file
+	cli.WriteFile("untracked.txt", "untracked\n")
+
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--with-changes", "--name", "wt-all")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// Verify all three types were copied
+	if cli.ReadFile(filepath.Join("worktrees", "wt-all", "staged.txt")) != "staged\n" {
+		t.Error("staged file was not copied correctly")
+	}
+
+	if cli.ReadFile(filepath.Join("worktrees", "wt-all", "README.md")) != "unstaged modification\n" {
+		t.Error("unstaged modification was not copied correctly")
+	}
+
+	if cli.ReadFile(filepath.Join("worktrees", "wt-all", "untracked.txt")) != "untracked\n" {
+		t.Error("untracked file was not copied correctly")
+	}
+}
+
+func Test_Create_Without_Changes_Does_Not_Copy_Uncommitted(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create an untracked file
+	cli.WriteFile("local-only.txt", "local content\n")
+
+	// Create worktree WITHOUT --with-changes
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--name", "wt-clean")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// Verify the untracked file was NOT copied
+	if cli.FileExists(filepath.Join("worktrees", "wt-clean", "local-only.txt")) {
+		t.Error("untracked file should not have been copied without --with-changes")
+	}
+}
+
+func Test_Create_With_Changes_No_Changes_Succeeds(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create worktree with --with-changes when there are no changes
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "--with-changes", "--name", "wt-no-changes")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	AssertContains(t, stdout, "Created worktree:")
+}
+
 // Helper function to create a branch in a git repo.
 func createBranch(t *testing.T, repoDir, branchName string) {
 	t.Helper()

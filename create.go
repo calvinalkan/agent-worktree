@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"slices"
 	"time"
 
@@ -136,10 +137,16 @@ func execCreate(
 		return fmt.Errorf("writing worktree metadata: %w", err)
 	}
 
-	// 10. If --with-changes: copy uncommitted changes (TODO: implemented in separate task d5faxh0)
+	// 10. If --with-changes: copy uncommitted changes
 	if withChanges {
-		// Placeholder - will be implemented in separate task
-		_ = withChanges
+		err = copyUncommittedChanges(fsys, git, cfg.EffectiveCwd, wtPath)
+		if err != nil {
+			// Rollback: remove worktree and delete branch
+			_ = git.WorktreeRemove(repoRoot, wtPath, true)
+			_ = git.BranchDelete(repoRoot, name, true)
+
+			return fmt.Errorf("copying uncommitted changes: %w", err)
+		}
 	}
 
 	// 11. Run post-create hook
@@ -162,6 +169,43 @@ func execCreate(
 	fprintf(stdout, "  path:        %s\n", wtPath)
 	fprintf(stdout, "  branch:      %s\n", name)
 	fprintf(stdout, "  from:        %s\n", baseBranch)
+
+	return nil
+}
+
+// copyUncommittedChanges copies staged, unstaged, and untracked files from srcDir to dstDir.
+// It respects .gitignore for untracked files.
+func copyUncommittedChanges(fsys fs.FS, git *Git, srcDir, dstDir string) error {
+	// Get all uncommitted files (staged, unstaged, and untracked)
+	files, err := git.ChangedFiles(srcDir)
+	if err != nil {
+		return fmt.Errorf("getting changed files: %w", err)
+	}
+
+	// Copy each file
+	for _, relPath := range files {
+		srcPath := filepath.Join(srcDir, relPath)
+		dstPath := filepath.Join(dstDir, relPath)
+
+		// Read source file
+		data, readErr := fsys.ReadFile(srcPath)
+		if readErr != nil {
+			// File might have been deleted (shown in diff but gone), skip silently
+			continue
+		}
+
+		// Create parent directories
+		mkdirErr := fsys.MkdirAll(filepath.Dir(dstPath), 0o755)
+		if mkdirErr != nil {
+			return fmt.Errorf("creating directory for %s: %w", relPath, mkdirErr)
+		}
+
+		// Write to destination
+		writeErr := fsys.WriteFile(dstPath, data, 0o644)
+		if writeErr != nil {
+			return fmt.Errorf("writing %s: %w", relPath, writeErr)
+		}
+	}
 
 	return nil
 }
