@@ -13,7 +13,7 @@ FOUND=$(git diff HEAD -U0 -- '*.go' | rg "^\+\+\+ b/|^@@|$PATTERN" | awk '
     /^\+\+\+ b\//{file=substr($0,7)}
     /^@@/{split($3,a,","); gsub(/\+/,"",a[1]); line=a[1]}
     /^\+.*(\/\/.*nolint|#nosec|\/\/.*lint:ignore|\/\*.*nolint)/{print file":"line": "$0}
-')
+' || true)
 
 if [ -n "$FOUND" ]; then
     echo "Error: Lint suppression directives are forbidden (nolint, nosec, lint:ignore)."
