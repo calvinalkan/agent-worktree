@@ -47,7 +47,9 @@ If .wt/hooks/post-create exists and is executable, it runs after creation.`,
 }
 
 // createLockTimeout is the maximum time to wait for the create lock.
-const createLockTimeout = 30 * time.Second
+// This is short because we only hold the lock during ID/name generation
+// and metadata write, not during slow operations like hooks.
+const createLockTimeout = 5 * time.Second
 
 // worktreeLockPath returns the path to the lock file for worktree operations.
 // We use a dedicated lock file inside the git common directory to:
@@ -105,11 +107,16 @@ func execCreate(
 	locker := fs.NewLocker(fsys)
 	lockPath := worktreeLockPath(gitCommonDir)
 
-	lock, err := locker.LockWithTimeout(lockPath, createLockTimeout)
+	lockCtx, lockCancel := context.WithTimeout(ctx, createLockTimeout)
+	defer lockCancel()
+
+	lock, err := locker.LockWithTimeout(lockCtx, lockPath)
 	if err != nil {
 		return fmt.Errorf("acquiring create lock (another wt process may be running): %w", err)
 	}
 
+	// Safety net - Close is idempotent; we release early after metadata write
+	// but this handles cleanup on early returns
 	defer func() { _ = lock.Close() }()
 
 	// 6. Find existing worktrees (safe now, we hold the lock)
@@ -175,6 +182,10 @@ func execCreate(
 			brErr,
 		)
 	}
+
+	// Release lock early - only needed for ID/name generation.
+	// Close is idempotent; defer above handles cleanup on early returns.
+	_ = lock.Close()
 
 	// 12. If --with-changes: copy uncommitted changes
 	if withChanges {

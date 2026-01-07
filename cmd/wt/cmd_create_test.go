@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/calvinalkan/agent-task/pkg/fs"
 )
@@ -1427,6 +1428,118 @@ func Test_Create_From_Worktree_Uses_Shared_Lock(t *testing.T) {
 	// Lock file should still be in main repo's .git (not in worktree)
 	if !cli.FileExists(".git/wt.lock") {
 		t.Error("lock file should remain in main .git directory")
+	}
+}
+
+// Tests for early lock release
+
+func Test_Create_Lock_Released_After_Metadata_Written(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a hook that verifies the lock file is NOT held by checking
+	// if we can acquire it ourselves with flock.
+	// If lock is still held, flock with LOCK_NB will fail immediately.
+	hookScript := `#!/bin/bash
+# Try to acquire lock with non-blocking mode
+# If lock is already held, this will fail immediately
+exec 200>"$WT_REPO_ROOT/.git/wt.lock"
+if flock -n 200; then
+    echo "LOCK_FREE" > "$WT_PATH/lock-status.txt"
+    flock -u 200
+else
+    echo "LOCK_HELD" > "$WT_PATH/lock-status.txt"
+fi
+`
+	cli.WriteExecutable(".wt/hooks/post-create", hookScript)
+
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--name", "lock-check")
+
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Read the lock status written by the hook
+	lockStatus := strings.TrimSpace(cli.ReadFile(filepath.Join("worktrees", "lock-check", "lock-status.txt")))
+	if lockStatus != "LOCK_FREE" {
+		t.Errorf("lock should be released before hook runs, but hook reported: %s", lockStatus)
+	}
+}
+
+func Test_Create_Concurrent_Create_During_Hook_Execution(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a hook that sleeps for 2 seconds and records its start time
+	hookScript := `#!/bin/bash
+echo "hook started for $WT_NAME at $(date +%s)" >> "$WT_REPO_ROOT/hook-log.txt"
+sleep 2
+echo "hook finished for $WT_NAME at $(date +%s)" >> "$WT_REPO_ROOT/hook-log.txt"
+`
+	cli.WriteExecutable(".wt/hooks/post-create", hookScript)
+
+	// Use separate goroutine and wait for both to complete
+	type result struct {
+		name   string
+		stdout string
+		stderr string
+		code   int
+	}
+
+	results := make(chan result, 2)
+
+	// Start two creates concurrently, with the second starting during the first hook
+	go func() {
+		stdout, stderr, code := cli.Run("--config", "config.json", "create", "--name", "first-wt")
+		results <- result{name: "first", stdout: stdout, stderr: stderr, code: code}
+	}()
+
+	// Wait a bit for first create to start its hook (after lock is released)
+	time.Sleep(500 * time.Millisecond)
+
+	go func() {
+		stdout, stderr, code := cli.Run("--config", "config.json", "create", "--name", "second-wt")
+		results <- result{name: "second", stdout: stdout, stderr: stderr, code: code}
+	}()
+
+	// Wait for both to complete
+	r1 := <-results
+	r2 := <-results
+
+	// Both should succeed
+	if r1.code != 0 {
+		t.Errorf("%s create failed: %s", r1.name, r1.stderr)
+	}
+
+	if r2.code != 0 {
+		t.Errorf("%s create failed: %s", r2.name, r2.stderr)
+	}
+
+	// Verify worktrees exist
+	if !cli.FileExists(filepath.Join("worktrees", "first-wt")) {
+		t.Error("first-wt worktree should exist")
+	}
+
+	if !cli.FileExists(filepath.Join("worktrees", "second-wt")) {
+		t.Error("second-wt worktree should exist")
+	}
+
+	// Check that hooks ran concurrently by examining the log
+	hookLog := cli.ReadFile("hook-log.txt")
+
+	// Both hooks should have started (4 lines: 2 start + 2 finish)
+	lines := strings.Split(strings.TrimSpace(hookLog), "\n")
+	if len(lines) < 4 {
+		t.Logf("hook log:\n%s", hookLog)
+		t.Errorf("expected at least 4 hook log lines, got %d", len(lines))
 	}
 }
 
