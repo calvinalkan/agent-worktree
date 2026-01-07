@@ -24,6 +24,28 @@ func Test_Info_Shows_Help_When_Help_Flag(t *testing.T) {
 	AssertContains(t, stdout, "--field")
 }
 
+func Test_Info_Help_Shows_Detailed_Description(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+
+	stdout, _, code := c.Run("info", "--help")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d", code)
+	}
+
+	// Verify clarification about wt-managed
+	AssertContains(t, stdout, "wt create")
+
+	// Verify scripting examples
+	AssertContains(t, stdout, "--field id")
+	AssertContains(t, stdout, "--field path")
+
+	// Verify field list in flag description
+	AssertContains(t, stdout, "name, agent_id, id, path, base_branch, created")
+}
+
 func Test_Info_Returns_Error_When_Not_In_Git_Repo(t *testing.T) {
 	t.Parallel()
 

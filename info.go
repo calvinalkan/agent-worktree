@@ -24,7 +24,7 @@ func InfoCmd(cfg Config, fsys fs.FS, git *Git) *Command {
 	flags := flag.NewFlagSet("info", flag.ContinueOnError)
 	flags.BoolP("help", "h", false, "Show help")
 	flags.Bool("json", false, "Output as JSON")
-	flags.String("field", "", "Output only the specified field value")
+	flags.String("field", "", "Output single field: name, agent_id, id, path, base_branch, created")
 
 	return &Command{
 		Flags: flags,
@@ -32,7 +32,11 @@ func InfoCmd(cfg Config, fsys fs.FS, git *Git) *Command {
 		Short: "Show current worktree info",
 		Long: `Display information about the current worktree.
 
-Must be run from within a wt-managed worktree.`,
+Must be run from within a wt-managed worktree (created by 'wt create').
+
+Use --field for scripting, e.g.:
+  wt info --field id      # Get worktree ID for port allocation
+  wt info --field path    # Get absolute path to worktree`,
 		Exec: func(_ context.Context, stdin io.Reader, stdout, stderr io.Writer, _ []string) error {
 			return execInfo(stdin, stdout, stderr, cfg, fsys, git, flags)
 		},
