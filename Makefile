@@ -11,7 +11,7 @@ BINARY := wt
 GO := go
 
 build:
-	$(GO) build -o $(BINARY) .
+	$(GO) build -o $(BINARY) ./cmd/wt
 	@[ -e ~/.local/bin/$(BINARY) ] || ln -sf $(CURDIR)/$(BINARY) ~/.local/bin/$(BINARY)
 
 modernize:
@@ -35,7 +35,7 @@ clean:
 	rm -f $(BINARY)
 
 install:
-	$(GO) install .
+	$(GO) install ./cmd/wt
 
 install-tools:
 	$(GO) install golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest
