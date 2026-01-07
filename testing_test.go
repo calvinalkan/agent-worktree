@@ -177,6 +177,29 @@ func (c *CLI) FileExists(relPath string) bool {
 	return err == nil
 }
 
+// ReadFileAt reads content from a file at an absolute base directory.
+// Useful for reading files from worktree paths returned by extractPath.
+func (c *CLI) ReadFileAt(baseDir, relPath string) string {
+	c.t.Helper()
+
+	path := filepath.Join(baseDir, relPath)
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		c.t.Fatalf("failed to read file %s: %v", path, err)
+	}
+
+	return string(content)
+}
+
+// FileExistsAt returns true if the file exists at an absolute base directory.
+func (c *CLI) FileExistsAt(baseDir, relPath string) bool {
+	path := filepath.Join(baseDir, relPath)
+	_, err := os.Stat(path)
+
+	return err == nil
+}
+
 // AssertContains fails the test if content doesn't contain substr.
 func AssertContains(t *testing.T, content, substr string) {
 	t.Helper()

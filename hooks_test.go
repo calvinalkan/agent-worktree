@@ -435,3 +435,228 @@ func Test_HookRunner_RunPreDelete_Calls_Hook(t *testing.T) {
 		t.Errorf("expected stdout to contain 'pre-delete-ran', got: %q", stdout.String())
 	}
 }
+
+// E2E tests for hooks with actual CLI commands
+
+func Test_E2E_PostCreate_Hook_Receives_All_Environment_Variables(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsOS {
+		t.Skip("skipping shell script test on Windows")
+	}
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create hook that outputs all WT_* variables to a file
+	hookScript := `#!/bin/bash
+cat > "$WT_PATH/hook-env.txt" << EOF
+WT_ID=$WT_ID
+WT_AGENT_ID=$WT_AGENT_ID
+WT_NAME=$WT_NAME
+WT_PATH=$WT_PATH
+WT_BASE_BRANCH=$WT_BASE_BRANCH
+WT_REPO_ROOT=$WT_REPO_ROOT
+WT_SOURCE=$WT_SOURCE
+EOF
+`
+	c.WriteExecutable(".wt/hooks/post-create", hookScript)
+
+	// Create worktree
+	stdout, stderr, code := c.Run("--config", "config.json", "create", "--name", "env-test")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	wtPath := extractPath(stdout)
+
+	// Read the env file created by hook
+	envContent := c.ReadFileAt(wtPath, "hook-env.txt")
+
+	// Verify each variable
+	AssertContains(t, envContent, "WT_ID=1")
+	AssertContains(t, envContent, "WT_NAME=env-test")
+	AssertContains(t, envContent, "WT_BASE_BRANCH=master")
+	AssertContains(t, envContent, "WT_PATH="+wtPath)
+
+	// Normalize paths for comparison (handle symlinks like /tmp -> /private/tmp on macOS)
+	expectedRepoRoot, _ := filepath.EvalSymlinks(c.Dir)
+	AssertContains(t, envContent, "WT_REPO_ROOT="+expectedRepoRoot)
+	AssertContains(t, envContent, "WT_SOURCE="+expectedRepoRoot)
+
+	// WT_AGENT_ID should be set (some adjective-animal combo)
+	if !strings.Contains(envContent, "WT_AGENT_ID=") {
+		t.Error("WT_AGENT_ID should be set")
+	}
+
+	// Verify agent_id is not empty
+	for line := range strings.SplitSeq(envContent, "\n") {
+		if after, ok := strings.CutPrefix(line, "WT_AGENT_ID="); ok {
+			agentID := after
+			if agentID == "" {
+				t.Error("WT_AGENT_ID should not be empty")
+			}
+
+			if !strings.Contains(agentID, "-") {
+				t.Errorf("WT_AGENT_ID should be in adjective-animal format, got %q", agentID)
+			}
+		}
+	}
+}
+
+func Test_E2E_PreDelete_Hook_Receives_All_Environment_Variables(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsOS {
+		t.Skip("skipping shell script test on Windows")
+	}
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create pre-delete hook that writes env to repo root (since worktree will be deleted)
+	hookScript := `#!/bin/bash
+cat > "$WT_REPO_ROOT/pre-delete-env.txt" << EOF
+WT_ID=$WT_ID
+WT_AGENT_ID=$WT_AGENT_ID
+WT_NAME=$WT_NAME
+WT_PATH=$WT_PATH
+WT_BASE_BRANCH=$WT_BASE_BRANCH
+WT_REPO_ROOT=$WT_REPO_ROOT
+WT_SOURCE=$WT_SOURCE
+EOF
+`
+	c.WriteExecutable(".wt/hooks/pre-delete", hookScript)
+
+	// Create worktree
+	_, stderr, code := c.Run("--config", "config.json", "create", "--name", "delete-env-test")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Delete worktree (with --force because new worktrees have uncommitted .wt/worktree.json)
+	_, stderr, code = c.Run("--config", "config.json", "delete", "delete-env-test", "--with-branch", "--force")
+	if code != 0 {
+		t.Fatalf("delete failed: %s", stderr)
+	}
+
+	// Check env was captured before deletion
+	envContent := c.ReadFile("pre-delete-env.txt")
+
+	AssertContains(t, envContent, "WT_ID=1")
+	AssertContains(t, envContent, "WT_NAME=delete-env-test")
+	AssertContains(t, envContent, "WT_BASE_BRANCH=master")
+
+	// WT_AGENT_ID should be set
+	if !strings.Contains(envContent, "WT_AGENT_ID=") {
+		t.Error("WT_AGENT_ID should be set")
+	}
+}
+
+func Test_E2E_Hook_Working_Directory_Is_WT_SOURCE(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsOS {
+		t.Skip("skipping shell script test on Windows")
+	}
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Hook that records pwd
+	hookScript := `#!/bin/bash
+pwd > "$WT_PATH/hook-pwd.txt"
+`
+	c.WriteExecutable(".wt/hooks/post-create", hookScript)
+
+	// Create worktree
+	stdout, stderr, code := c.Run("--config", "config.json", "create", "--name", "pwd-test")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	wtPath := extractPath(stdout)
+	hookPwd := strings.TrimSpace(c.ReadFileAt(wtPath, "hook-pwd.txt"))
+
+	// Normalize paths for comparison
+	expectedSource, _ := filepath.EvalSymlinks(c.Dir)
+	actualPwd, _ := filepath.EvalSymlinks(hookPwd)
+
+	if actualPwd != expectedSource {
+		t.Errorf("hook pwd = %s, want %s (WT_SOURCE)", actualPwd, expectedSource)
+	}
+}
+
+func Test_E2E_Hook_Can_Access_Worktree_Path(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsOS {
+		t.Skip("skipping shell script test on Windows")
+	}
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Hook that creates a file in the worktree
+	hookScript := `#!/bin/bash
+echo "hook was here" > "$WT_PATH/created-by-hook.txt"
+`
+	c.WriteExecutable(".wt/hooks/post-create", hookScript)
+
+	// Create worktree
+	stdout, stderr, code := c.Run("--config", "config.json", "create", "--name", "access-test")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	wtPath := extractPath(stdout)
+
+	// Verify hook created the file
+	if !c.FileExistsAt(wtPath, "created-by-hook.txt") {
+		t.Error("hook should have created file in WT_PATH")
+	}
+
+	content := c.ReadFileAt(wtPath, "created-by-hook.txt")
+	AssertContains(t, content, "hook was here")
+}
+
+func Test_E2E_Hook_Can_Access_Repo_Root(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsOS {
+		t.Skip("skipping shell script test on Windows")
+	}
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Hook that creates a file in the repo root
+	hookScript := `#!/bin/bash
+echo "hook was here" > "$WT_REPO_ROOT/hook-marker.txt"
+`
+	c.WriteExecutable(".wt/hooks/post-create", hookScript)
+
+	// Create worktree
+	_, stderr, code := c.Run("--config", "config.json", "create", "--name", "repo-access-test")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Verify hook created the file in repo root
+	if !c.FileExists("hook-marker.txt") {
+		t.Error("hook should have created file in WT_REPO_ROOT")
+	}
+
+	content := c.ReadFile("hook-marker.txt")
+	AssertContains(t, content, "hook was here")
+}
