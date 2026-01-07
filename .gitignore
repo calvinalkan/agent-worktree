@@ -1,5 +1,5 @@
 # Build output
-wt
+/wt
 
 # Test binaries
 *.test

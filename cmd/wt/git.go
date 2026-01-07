@@ -1,0 +1,250 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os/exec"
+	"path/filepath"
+	"strings"
+)
+
+// Static errors for git operations.
+var (
+	ErrNotGitRepository  = errors.New("not a git repository (use -C to specify repo path)")
+	ErrGitWorktreeAdd    = errors.New("creating worktree")
+	ErrGitWorktreeRemove = errors.New("removing worktree")
+	ErrGitWorktreePrune  = errors.New("pruning worktree metadata")
+	ErrGitWorktreeList   = errors.New("listing worktrees")
+	ErrGitBranchDelete   = errors.New("deleting branch")
+	ErrGitCurrentBranch  = errors.New("getting current branch")
+	ErrGitStatusCheck    = errors.New("checking git status")
+)
+
+// Git provides git operations with explicit environment control.
+// This allows isolation in tests by passing a controlled environment.
+type Git struct {
+	env []string
+}
+
+// NewGit creates a Git instance with the given environment.
+// In production, pass the result of os.Environ().
+// In tests, pass nil or empty slice for isolation.
+func NewGit(env []string) *Git {
+	return &Git{env: env}
+}
+
+// RepoRoot returns the repository root directory.
+// Returns error if not in a git repository.
+func (g *Git) RepoRoot(ctx context.Context, cwd string) (string, error) {
+	cmd := g.newCmdContext(ctx, "-C", cwd, "rev-parse", "--show-toplevel")
+
+	out, err := cmd.Output()
+	if err != nil {
+		return "", ErrNotGitRepository
+	}
+
+	return strings.TrimSpace(string(out)), nil
+}
+
+// GitCommonDir returns the absolute path to the shared .git directory.
+// For a regular repo, this is .git/. For a worktree, this returns
+// the main repository's .git directory, ensuring all worktrees
+// share the same lock files.
+func (g *Git) GitCommonDir(ctx context.Context, cwd string) (string, error) {
+	cmd := g.newCmdContext(ctx, "-C", cwd, "rev-parse", "--path-format=absolute", "--git-common-dir")
+
+	out, err := cmd.Output()
+	if err != nil {
+		return "", ErrNotGitRepository
+	}
+
+	return strings.TrimSpace(string(out)), nil
+}
+
+// MainRepoRoot returns the root directory of the main repository.
+// For a regular repo, this is the same as RepoRoot. For a worktree,
+// this returns the main repository's root (not the worktree's root).
+// This ensures all worktrees resolve to the same base directory.
+func (g *Git) MainRepoRoot(ctx context.Context, cwd string) (string, error) {
+	gitDir, err := g.GitCommonDir(ctx, cwd)
+	if err != nil {
+		return "", err
+	}
+
+	// gitDir is /path/to/repo/.git, so parent is the repo root
+	return filepath.Dir(gitDir), nil
+}
+
+// CurrentBranch returns the current branch name.
+func (g *Git) CurrentBranch(ctx context.Context, cwd string) (string, error) {
+	cmd := g.newCmdContext(ctx, "-C", cwd, "branch", "--show-current")
+
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrGitCurrentBranch, err)
+	}
+
+	return strings.TrimSpace(string(out)), nil
+}
+
+// IsDirty returns true if the worktree has uncommitted changes.
+func (g *Git) IsDirty(ctx context.Context, path string) (bool, error) {
+	cmd := g.newCmdContext(ctx, "-C", path, "status", "--porcelain")
+
+	out, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("%w: %w", ErrGitStatusCheck, err)
+	}
+
+	return len(out) > 0, nil
+}
+
+// WorktreeAdd creates a new worktree with a new branch.
+func (g *Git) WorktreeAdd(ctx context.Context, repoRoot, wtPath, branch, baseBranch string) error {
+	cmd := g.newCmdContext(ctx, "-C", repoRoot, "worktree", "add", "-b", branch, wtPath, baseBranch)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrGitWorktreeAdd, strings.TrimSpace(string(out)))
+	}
+
+	return nil
+}
+
+// WorktreeRemove removes a worktree.
+func (g *Git) WorktreeRemove(ctx context.Context, repoRoot, wtPath string, force bool) error {
+	args := []string{"-C", repoRoot, "worktree", "remove", wtPath}
+	if force {
+		args = append(args, "--force")
+	}
+
+	cmd := g.newCmdContext(ctx, args...)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrGitWorktreeRemove, strings.TrimSpace(string(out)))
+	}
+
+	return nil
+}
+
+// WorktreePrune prunes stale worktree metadata.
+func (g *Git) WorktreePrune(ctx context.Context, repoRoot string) error {
+	cmd := g.newCmdContext(ctx, "-C", repoRoot, "worktree", "prune")
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrGitWorktreePrune, strings.TrimSpace(string(out)))
+	}
+
+	return nil
+}
+
+// BranchDelete deletes a branch.
+func (g *Git) BranchDelete(ctx context.Context, repoRoot, branch string, force bool) error {
+	flag := "-d"
+	if force {
+		flag = "-D"
+	}
+
+	cmd := g.newCmdContext(ctx, "-C", repoRoot, "branch", flag, branch)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrGitBranchDelete, strings.TrimSpace(string(out)))
+	}
+
+	return nil
+}
+
+// WorktreeList returns paths of all worktrees for the repo.
+func (g *Git) WorktreeList(ctx context.Context, repoRoot string) ([]string, error) {
+	cmd := g.newCmdContext(ctx, "-C", repoRoot, "worktree", "list", "--porcelain")
+
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrGitWorktreeList, err)
+	}
+
+	// Parse "worktree <path>" lines
+	var paths []string
+
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if after, ok := strings.CutPrefix(line, "worktree "); ok {
+			paths = append(paths, after)
+		}
+	}
+
+	return paths, nil
+}
+
+// ChangedFiles returns all uncommitted files: staged, unstaged, and untracked.
+// Untracked files respect .gitignore.
+// Returns relative paths from the repository root.
+func (g *Git) ChangedFiles(ctx context.Context, cwd string) ([]string, error) {
+	files := make(map[string]struct{})
+
+	// Get staged and unstaged changes compared to HEAD
+	cmd := g.newCmdContext(ctx, "-C", cwd, "diff", "--name-only", "HEAD")
+
+	out, err := cmd.Output()
+	if err != nil {
+		// HEAD might not exist (initial commit), try without HEAD
+		cmd = g.newCmdContext(ctx, "-C", cwd, "diff", "--name-only")
+
+		out, err = cmd.Output()
+		if err != nil {
+			return nil, fmt.Errorf("getting diff: %w", err)
+		}
+	}
+
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			files[line] = struct{}{}
+		}
+	}
+
+	// Get staged files (in case some are only staged, not yet in HEAD)
+	cmd = g.newCmdContext(ctx, "-C", cwd, "diff", "--cached", "--name-only")
+
+	out, err = cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("getting staged diff: %w", err)
+	}
+
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			files[line] = struct{}{}
+		}
+	}
+
+	// Get untracked files (respecting .gitignore)
+	cmd = g.newCmdContext(ctx, "-C", cwd, "ls-files", "--others", "--exclude-standard")
+
+	out, err = cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("listing untracked files: %w", err)
+	}
+
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			files[line] = struct{}{}
+		}
+	}
+
+	result := make([]string, 0, len(files))
+	for f := range files {
+		result = append(result, f)
+	}
+
+	return result, nil
+}
+
+// newCmdContext creates an exec.Cmd for git with the configured environment and context.
+func (g *Git) newCmdContext(ctx context.Context, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Env = g.env
+
+	return cmd
+}
