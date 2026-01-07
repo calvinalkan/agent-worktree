@@ -416,8 +416,8 @@ func Test_Create_Hook_Receives_Environment_Variables(t *testing.T) {
 	var agentID string
 
 	for _, line := range lines {
-		if strings.HasPrefix(line, "WT_AGENT_ID=") {
-			agentID = strings.TrimPrefix(line, "WT_AGENT_ID=")
+		if after, ok := strings.CutPrefix(line, "WT_AGENT_ID="); ok {
+			agentID = after
 
 			break
 		}
