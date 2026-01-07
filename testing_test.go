@@ -47,6 +47,16 @@ func (c *CLI) Run(args ...string) (string, string, int) {
 	return c.RunWithInput(nil, args...)
 }
 
+// RunInDir executes the CLI in a specific directory.
+func (c *CLI) RunInDir(dir string, args ...string) (string, string, int) {
+	var outBuf, errBuf bytes.Buffer
+
+	fullArgs := append([]string{"wt", "--cwd", dir}, args...)
+	code := Run(nil, &outBuf, &errBuf, fullArgs, c.Env, nil)
+
+	return outBuf.String(), errBuf.String(), code
+}
+
 // RunWithInput executes the CLI with stdin and args.
 // stdin can be nil, an io.Reader, or a []string (joined with newlines).
 func (c *CLI) RunWithInput(stdin any, args ...string) (string, string, int) {

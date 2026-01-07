@@ -650,3 +650,40 @@ func Test_List_After_Delete_Shows_Remaining_Worktrees(t *testing.T) {
 		t.Errorf("expected remaining worktree to be wt-keep, got %s", worktrees[0].Name)
 	}
 }
+
+func Test_List_From_Inside_Worktree_Shows_All_Worktrees(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create two worktrees from main repo
+	c.MustRun("--config", "config.json", "create", "--name", "wt-first")
+	c.MustRun("--config", "config.json", "create", "--name", "wt-second")
+
+	// Copy config to first worktree
+	configContent := c.ReadFile("config.json")
+	c.WriteFile(filepath.Join("worktrees", "wt-first", "config.json"), configContent)
+
+	// List from inside the first worktree
+	wtPath := filepath.Join(c.Dir, "worktrees", "wt-first")
+	stdout, stderr, code := c.RunInDir(wtPath, "--config", "config.json", "list", "--json")
+
+	if code != 0 {
+		t.Fatalf("list from worktree failed: %s", stderr)
+	}
+
+	var worktrees []jsonWorktree
+
+	err := json.Unmarshal([]byte(stdout), &worktrees)
+	if err != nil {
+		t.Fatalf("invalid JSON output: %v\n%s", err, stdout)
+	}
+
+	// Should see both worktrees (not just ones relative to current worktree)
+	if len(worktrees) != 2 {
+		t.Errorf("expected 2 worktrees when listing from inside worktree, got %d", len(worktrees))
+	}
+}

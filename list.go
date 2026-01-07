@@ -34,14 +34,14 @@ func ListCmd(cfg Config, fsys fs.FS, git *Git) *Command {
 func execList(_ io.Reader, stdout, _ io.Writer, cfg Config, fsys fs.FS, git *Git, flags *flag.FlagSet) error {
 	jsonOutput, _ := flags.GetBool("json")
 
-	// Verify git repository
-	repoRoot, err := git.RepoRoot(cfg.EffectiveCwd)
+	// Get main repo root (works from inside worktrees too)
+	mainRepoRoot, err := git.MainRepoRoot(cfg.EffectiveCwd)
 	if err != nil {
 		return ErrNotGitRepository
 	}
 
 	// Find worktrees
-	baseDir := resolveWorktreeBaseDir(cfg, repoRoot)
+	baseDir := resolveWorktreeBaseDir(cfg, mainRepoRoot)
 
 	worktrees, err := findWorktreesWithPaths(fsys, baseDir)
 	if err != nil {

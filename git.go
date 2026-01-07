@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -43,6 +44,35 @@ func (g *Git) RepoRoot(cwd string) (string, error) {
 	}
 
 	return strings.TrimSpace(string(out)), nil
+}
+
+// GitCommonDir returns the absolute path to the shared .git directory.
+// For a regular repo, this is .git/. For a worktree, this returns
+// the main repository's .git directory, ensuring all worktrees
+// share the same lock files.
+func (g *Git) GitCommonDir(cwd string) (string, error) {
+	cmd := g.newCmd("-C", cwd, "rev-parse", "--path-format=absolute", "--git-common-dir")
+
+	out, err := cmd.Output()
+	if err != nil {
+		return "", ErrNotGitRepository
+	}
+
+	return strings.TrimSpace(string(out)), nil
+}
+
+// MainRepoRoot returns the root directory of the main repository.
+// For a regular repo, this is the same as RepoRoot. For a worktree,
+// this returns the main repository's root (not the worktree's root).
+// This ensures all worktrees resolve to the same base directory.
+func (g *Git) MainRepoRoot(cwd string) (string, error) {
+	gitDir, err := g.GitCommonDir(cwd)
+	if err != nil {
+		return "", err
+	}
+
+	// gitDir is /path/to/repo/.git, so parent is the repo root
+	return filepath.Dir(gitDir), nil
 }
 
 // CurrentBranch returns the current branch name.

@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/calvinalkan/agent-task/pkg/fs"
@@ -1079,6 +1081,329 @@ exit 1
 
 	// Should see branch delete error
 	AssertContains(t, stderr, "git branch delete failed")
+}
+
+// Tests for concurrent worktree creation
+
+func Test_Create_Concurrent_Creates_Have_Unique_IDs(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	const numWorktrees = 20
+
+	type result struct {
+		id     int
+		name   string
+		stderr string
+		code   int
+	}
+
+	results := make(chan result, numWorktrees)
+
+	// Launch all goroutines simultaneously using a barrier
+	var wg sync.WaitGroup
+
+	start := make(chan struct{})
+
+	for i := range numWorktrees {
+		wg.Add(1)
+
+		go func(idx int) {
+			defer wg.Done()
+
+			// Wait for start signal (barrier)
+			<-start
+
+			name := fmt.Sprintf("stress-wt-%d", idx)
+			stdout, stderr, code := cli.Run("--config", "config.json", "create", "--name", name)
+
+			var id int
+
+			for line := range strings.SplitSeq(stdout, "\n") {
+				if strings.Contains(line, "id:") {
+					fields := strings.Fields(line)
+					if len(fields) >= 2 {
+						_, _ = fmt.Sscanf(fields[1], "%d", &id)
+					}
+				}
+			}
+
+			results <- result{id: id, name: name, stderr: stderr, code: code}
+		}(i)
+	}
+
+	// Release all goroutines at once
+	close(start)
+
+	// Wait for all to complete
+	wg.Wait()
+	close(results)
+
+	// Collect and verify results
+	ids := make(map[int]string)
+	successCount := 0
+
+	for r := range results {
+		if r.code != 0 {
+			t.Errorf("create %s failed: %s", r.name, r.stderr)
+
+			continue
+		}
+
+		successCount++
+
+		if r.id == 0 {
+			t.Errorf("could not extract ID for %s", r.name)
+
+			continue
+		}
+
+		if existingName, exists := ids[r.id]; exists {
+			t.Errorf("RACE CONDITION: duplicate ID %d assigned to both %s and %s", r.id, existingName, r.name)
+		}
+
+		ids[r.id] = r.name
+	}
+
+	// All should succeed
+	if successCount != numWorktrees {
+		t.Errorf("expected %d successful creates, got %d", numWorktrees, successCount)
+	}
+
+	// All IDs should be unique and sequential
+	if len(ids) != numWorktrees {
+		t.Errorf("expected %d unique IDs, got %d", numWorktrees, len(ids))
+	}
+
+	for i := 1; i <= numWorktrees; i++ {
+		if _, exists := ids[i]; !exists {
+			t.Errorf("missing expected ID %d in sequence", i)
+		}
+	}
+}
+
+func Test_Create_Concurrent_From_Multiple_Worktrees(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// First create two worktrees sequentially
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--name", "wt-a")
+	if code != 0 {
+		t.Fatalf("create wt-a failed: %s", stderr)
+	}
+
+	_, stderr, code = cli.Run("--config", "config.json", "create", "--name", "wt-b")
+	if code != 0 {
+		t.Fatalf("create wt-b failed: %s", stderr)
+	}
+
+	// Copy config to both worktrees
+	configContent := cli.ReadFile("config.json")
+	cli.WriteFile(filepath.Join("worktrees", "wt-a", "config.json"), configContent)
+	cli.WriteFile(filepath.Join("worktrees", "wt-b", "config.json"), configContent)
+
+	wtPathA := filepath.Join(cli.Dir, "worktrees", "wt-a")
+	wtPathB := filepath.Join(cli.Dir, "worktrees", "wt-b")
+
+	const numPerWorktree = 5
+
+	type result struct {
+		id       int
+		name     string
+		stderr   string
+		code     int
+		fromPath string
+	}
+
+	results := make(chan result, numPerWorktree*2)
+
+	var wg sync.WaitGroup
+
+	start := make(chan struct{})
+
+	// Launch creates from worktree A
+	for i := range numPerWorktree {
+		wg.Add(1)
+
+		go func(idx int, wtPath string) {
+			defer wg.Done()
+
+			<-start
+
+			name := fmt.Sprintf("from-a-%d", idx)
+			stdout, stderr, code := cli.RunInDir(wtPath, "--config", "config.json", "create", "--name", name)
+
+			var id int
+
+			for line := range strings.SplitSeq(stdout, "\n") {
+				if strings.Contains(line, "id:") {
+					fields := strings.Fields(line)
+					if len(fields) >= 2 {
+						_, _ = fmt.Sscanf(fields[1], "%d", &id)
+					}
+				}
+			}
+
+			results <- result{id: id, name: name, stderr: stderr, code: code, fromPath: wtPath}
+		}(i, wtPathA)
+	}
+
+	// Launch creates from worktree B
+	for i := range numPerWorktree {
+		wg.Add(1)
+
+		go func(idx int, wtPath string) {
+			defer wg.Done()
+
+			<-start
+
+			name := fmt.Sprintf("from-b-%d", idx)
+			stdout, stderr, code := cli.RunInDir(wtPath, "--config", "config.json", "create", "--name", name)
+
+			var id int
+
+			for line := range strings.SplitSeq(stdout, "\n") {
+				if strings.Contains(line, "id:") {
+					fields := strings.Fields(line)
+					if len(fields) >= 2 {
+						_, _ = fmt.Sscanf(fields[1], "%d", &id)
+					}
+				}
+			}
+
+			results <- result{id: id, name: name, stderr: stderr, code: code, fromPath: wtPath}
+		}(i, wtPathB)
+	}
+
+	// Release all goroutines
+	close(start)
+
+	wg.Wait()
+	close(results)
+
+	// Verify results
+	ids := make(map[int]string)
+	successCount := 0
+
+	for r := range results {
+		if r.code != 0 {
+			t.Errorf("create %s from %s failed: %s", r.name, r.fromPath, r.stderr)
+
+			continue
+		}
+
+		successCount++
+
+		if r.id == 0 {
+			t.Errorf("could not extract ID for %s", r.name)
+
+			continue
+		}
+
+		if existingName, exists := ids[r.id]; exists {
+			t.Errorf("RACE CONDITION: duplicate ID %d assigned to both %s and %s", r.id, existingName, r.name)
+		}
+
+		ids[r.id] = r.name
+	}
+
+	expectedTotal := numPerWorktree * 2
+
+	if successCount != expectedTotal {
+		t.Errorf("expected %d successful creates, got %d", expectedTotal, successCount)
+	}
+
+	// IDs should start from 3 (1=wt-a, 2=wt-b) and go up
+	expectedIDs := make(map[int]bool)
+	for i := 3; i <= 2+expectedTotal; i++ {
+		expectedIDs[i] = true
+	}
+
+	for id := range ids {
+		if !expectedIDs[id] {
+			t.Errorf("unexpected ID %d (expected 3-%d)", id, 2+expectedTotal)
+		}
+
+		delete(expectedIDs, id)
+	}
+
+	for id := range expectedIDs {
+		t.Errorf("missing expected ID %d", id)
+	}
+}
+
+func Test_Create_Lock_File_Is_Inside_Git_Directory(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--name", "lock-test")
+
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Lock file should be inside .git directory
+	if !cli.FileExists(".git/wt.lock") {
+		t.Error(".git/wt.lock should exist after create")
+	}
+
+	// No orphan lock file should be created in base directory
+	if cli.FileExists(filepath.Join("worktrees", ".wt-create.lock")) {
+		t.Error("orphan lock file should not be created in worktrees directory")
+	}
+}
+
+func Test_Create_From_Worktree_Uses_Shared_Lock(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create first worktree from main repo
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--name", "wt-first")
+	if code != 0 {
+		t.Fatalf("first create failed: %s", stderr)
+	}
+
+	// Verify lock file is in main repo's .git
+	if !cli.FileExists(".git/wt.lock") {
+		t.Error(".git/wt.lock should exist")
+	}
+
+	// Now create second worktree from inside the first worktree
+	wtPath := filepath.Join(cli.Dir, "worktrees", "wt-first")
+
+	// Copy config to worktree
+	configContent := cli.ReadFile("config.json")
+	cli.WriteFile(filepath.Join("worktrees", "wt-first", "config.json"), configContent)
+
+	// Run create from inside the worktree
+	stdout, stderr, code := cli.RunInDir(wtPath, "--config", "config.json", "create", "--name", "wt-second")
+	if code != 0 {
+		t.Fatalf("second create from worktree failed: %s", stderr)
+	}
+
+	// Should have unique ID (not 1, since wt-first is 1)
+	AssertContains(t, stdout, "id:          2")
+
+	// Lock file should still be in main repo's .git (not in worktree)
+	if !cli.FileExists(".git/wt.lock") {
+		t.Error("lock file should remain in main .git directory")
+	}
 }
 
 // Helper function to create a branch in a git repo.

@@ -42,6 +42,19 @@ worktree name. Use --name to override.`,
 	}
 }
 
+// createLockTimeout is the maximum time to wait for the create lock.
+const createLockTimeout = 30 * time.Second
+
+// worktreeLockPath returns the path to the lock file for worktree operations.
+// We use a dedicated lock file inside the git common directory to:
+// - Avoid orphan files in the workspace (it's inside .git/)
+// - Avoid conflicts with git operations (dedicated file, not used by git)
+// - Ensure all worktrees share the same lock (using git common dir)
+// - Handle cleanup automatically (deleted when repo is deleted).
+func worktreeLockPath(gitCommonDir string) string {
+	return filepath.Join(gitCommonDir, "wt.lock")
+}
+
 func execCreate(
 	ctx context.Context,
 	stdout, stderr io.Writer,
@@ -52,13 +65,21 @@ func execCreate(
 	customName, fromBranch string,
 	withChanges bool,
 ) error {
-	// 1. Verify git repository
-	repoRoot, err := git.RepoRoot(cfg.EffectiveCwd)
+	// 1. Verify git repository and get main repo root
+	// MainRepoRoot returns the main repo's root even when inside a worktree,
+	// ensuring all worktrees share the same base directory and lock file.
+	mainRepoRoot, err := git.MainRepoRoot(cfg.EffectiveCwd)
 	if err != nil {
 		return ErrNotGitRepository
 	}
 
-	// 2. Resolve base branch
+	// 2. Get git common directory (shared across all worktrees) for locking
+	gitCommonDir, err := git.GitCommonDir(cfg.EffectiveCwd)
+	if err != nil {
+		return fmt.Errorf("cannot determine git directory: %w", err)
+	}
+
+	// 3. Resolve base branch
 	baseBranch := fromBranch
 	if baseBranch == "" {
 		baseBranch, err = git.CurrentBranch(cfg.EffectiveCwd)
@@ -67,9 +88,27 @@ func execCreate(
 		}
 	}
 
-	// 3. Find existing worktrees
-	baseDir := resolveWorktreeBaseDir(cfg, repoRoot)
+	// 4. Create base directory if needed (must exist before locking)
+	baseDir := resolveWorktreeBaseDir(cfg, mainRepoRoot)
 
+	err = fsys.MkdirAll(baseDir, 0o750)
+	if err != nil {
+		return fmt.Errorf("cannot create base directory: %w", err)
+	}
+
+	// 5. Acquire exclusive lock for ID generation
+	// This prevents race conditions when multiple processes create worktrees
+	locker := fs.NewLocker(fsys)
+	lockPath := worktreeLockPath(gitCommonDir)
+
+	lock, err := locker.LockWithTimeout(lockPath, createLockTimeout)
+	if err != nil {
+		return fmt.Errorf("acquiring create lock: %w", err)
+	}
+
+	defer func() { _ = lock.Close() }()
+
+	// 6. Find existing worktrees (safe now, we hold the lock)
 	existing, err := findWorktrees(fsys, baseDir)
 	if err != nil {
 		return fmt.Errorf("scanning existing worktrees: %w", err)
@@ -83,7 +122,7 @@ func execCreate(
 		}
 	}
 
-	// 4. Generate agent_id
+	// 7. Generate agent_id
 	existingNames := getExistingNames(existing)
 
 	agentID, err := generateAgentID(existingNames)
@@ -91,7 +130,7 @@ func execCreate(
 		return err
 	}
 
-	// 5. Set name
+	// 8. Set name
 	name := customName
 	if name == "" {
 		name = agentID
@@ -102,24 +141,16 @@ func execCreate(
 		return fmt.Errorf("%w: %s", ErrNameAlreadyInUse, name)
 	}
 
-	// 6. Resolve worktree path
-	wtPath := resolveWorktreePath(cfg, repoRoot, name)
+	// 9. Resolve worktree path
+	wtPath := resolveWorktreePath(cfg, mainRepoRoot, name)
 
-	// 7. Create base directory if needed
-	wtBaseDir := resolveWorktreeBaseDir(cfg, repoRoot)
-
-	err = fsys.MkdirAll(wtBaseDir, 0o750)
-	if err != nil {
-		return fmt.Errorf("cannot create base directory: %w", err)
-	}
-
-	// 8. git worktree add -b <name> <path> <base-branch>
-	err = git.WorktreeAdd(repoRoot, wtPath, name, baseBranch)
+	// 10. git worktree add -b <name> <path> <base-branch>
+	err = git.WorktreeAdd(mainRepoRoot, wtPath, name, baseBranch)
 	if err != nil {
 		return err
 	}
 
-	// 9. Write .wt/worktree.json metadata
+	// 11. Write .wt/worktree.json metadata
 	info := &WorktreeInfo{
 		Name:       name,
 		AgentID:    agentID,
@@ -131,8 +162,8 @@ func execCreate(
 	err = writeWorktreeInfo(fsys, wtPath, info)
 	if err != nil {
 		// Rollback: remove worktree
-		rmErr := git.WorktreeRemove(repoRoot, wtPath, true)
-		brErr := git.BranchDelete(repoRoot, name, true)
+		rmErr := git.WorktreeRemove(mainRepoRoot, wtPath, true)
+		brErr := git.BranchDelete(mainRepoRoot, name, true)
 
 		return errors.Join(
 			fmt.Errorf("writing worktree metadata: %w", err),
@@ -141,13 +172,13 @@ func execCreate(
 		)
 	}
 
-	// 10. If --with-changes: copy uncommitted changes
+	// 12. If --with-changes: copy uncommitted changes
 	if withChanges {
 		err = copyUncommittedChanges(fsys, git, cfg.EffectiveCwd, wtPath)
 		if err != nil {
 			// Rollback: remove worktree and delete branch
-			rmErr := git.WorktreeRemove(repoRoot, wtPath, true)
-			brErr := git.BranchDelete(repoRoot, name, true)
+			rmErr := git.WorktreeRemove(mainRepoRoot, wtPath, true)
+			brErr := git.BranchDelete(mainRepoRoot, name, true)
 
 			return errors.Join(
 				fmt.Errorf("copying uncommitted changes: %w", err),
@@ -157,14 +188,14 @@ func execCreate(
 		}
 	}
 
-	// 11. Run post-create hook
-	hookRunner := NewHookRunner(fsys, repoRoot, env, stdout, stderr)
+	// 13. Run post-create hook
+	hookRunner := NewHookRunner(fsys, mainRepoRoot, env, stdout, stderr)
 
 	err = hookRunner.RunPostCreate(ctx, info, wtPath, cfg.EffectiveCwd)
 	if err != nil {
-		// 12. Rollback: remove worktree and delete branch
-		rmErr := git.WorktreeRemove(repoRoot, wtPath, true)
-		brErr := git.BranchDelete(repoRoot, name, true)
+		// Rollback: remove worktree and delete branch
+		rmErr := git.WorktreeRemove(mainRepoRoot, wtPath, true)
+		brErr := git.BranchDelete(mainRepoRoot, name, true)
 
 		return errors.Join(
 			fmt.Errorf("post-create hook failed: %w", err),
@@ -173,7 +204,7 @@ func execCreate(
 		)
 	}
 
-	// 13. Print success output
+	// 14. Print success output
 	fprintln(stdout, "Created worktree:")
 	fprintf(stdout, "  name:        %s\n", name)
 	fprintf(stdout, "  agent_id:    %s\n", agentID)

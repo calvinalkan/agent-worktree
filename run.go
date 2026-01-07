@@ -403,32 +403,36 @@ func getRepoName(repoRoot string) string {
 //
 //	base=../worktrees, cwd=/code/myapp, name=swift-fox
 //	  => /code/worktrees/swift-fox
-func resolveWorktreePath(cfg Config, repoRoot, worktreeName string) string {
+func resolveWorktreePath(cfg Config, mainRepoRoot, worktreeName string) string {
 	base := ExpandPath(cfg.Base)
 
 	if IsAbsolutePath(cfg.Base) {
 		// Absolute: include repo name in path
-		repoName := getRepoName(repoRoot)
+		repoName := getRepoName(mainRepoRoot)
 
 		return filepath.Join(base, repoName, worktreeName)
 	}
 
-	// Relative: resolve from effective cwd, no repo name
-	return filepath.Join(cfg.EffectiveCwd, base, worktreeName)
+	// Relative: resolve from main repo root, no repo name.
+	// This ensures consistency when creating from inside worktrees.
+	return filepath.Join(mainRepoRoot, base, worktreeName)
 }
 
 // resolveWorktreeBaseDir returns the directory containing worktrees for a repo.
 // Used by list/delete to find existing worktrees.
-func resolveWorktreeBaseDir(cfg Config, repoRoot string) string {
+func resolveWorktreeBaseDir(cfg Config, mainRepoRoot string) string {
 	base := ExpandPath(cfg.Base)
 
 	if IsAbsolutePath(cfg.Base) {
-		repoName := getRepoName(repoRoot)
+		repoName := getRepoName(mainRepoRoot)
 
 		return filepath.Join(base, repoName)
 	}
 
-	return filepath.Join(cfg.EffectiveCwd, base)
+	// For relative paths, resolve relative to main repo root (not cwd).
+	// This ensures worktrees created from inside other worktrees use
+	// the same base directory as the main repo.
+	return filepath.Join(mainRepoRoot, base)
 }
 
 // WorktreeInfo holds metadata for a wt-managed worktree.

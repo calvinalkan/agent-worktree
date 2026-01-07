@@ -65,14 +65,14 @@ func execDelete(
 	force, _ := flags.GetBool("force")
 	withBranch, _ := flags.GetBool("with-branch")
 
-	// 1. Verify git repository
-	repoRoot, err := git.RepoRoot(cfg.EffectiveCwd)
+	// 1. Get main repo root (works from inside worktrees too)
+	mainRepoRoot, err := git.MainRepoRoot(cfg.EffectiveCwd)
 	if err != nil {
 		return ErrNotGitRepository
 	}
 
 	// 2. Find worktree by name
-	baseDir := resolveWorktreeBaseDir(cfg, repoRoot)
+	baseDir := resolveWorktreeBaseDir(cfg, mainRepoRoot)
 	wtPath := filepath.Join(baseDir, name)
 
 	info, err := readWorktreeInfo(fsys, wtPath)
@@ -97,7 +97,7 @@ func execDelete(
 	}
 
 	// 4. Run pre-delete hook
-	hookRunner := NewHookRunner(fsys, repoRoot, env, stdout, stderr)
+	hookRunner := NewHookRunner(fsys, mainRepoRoot, env, stdout, stderr)
 
 	err = hookRunner.RunPreDelete(ctx, &info, wtPath, cfg.EffectiveCwd)
 	if err != nil {
@@ -105,7 +105,7 @@ func execDelete(
 	}
 
 	// 5. Remove worktree
-	err = git.WorktreeRemove(repoRoot, wtPath, force)
+	err = git.WorktreeRemove(mainRepoRoot, wtPath, force)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errRemovingWorktreeFailed, err)
 	}
@@ -121,7 +121,7 @@ func execDelete(
 
 	// 7. Delete branch if requested
 	if deleteBranch {
-		err = git.BranchDelete(repoRoot, name, force)
+		err = git.BranchDelete(mainRepoRoot, name, force)
 		if err != nil {
 			// Log but don't fail - worktree already deleted
 			fprintf(stderr, "warning: could not delete branch %s: %v\n", name, err)
@@ -129,7 +129,7 @@ func execDelete(
 	}
 
 	// 8. Prune worktree metadata
-	err = git.WorktreePrune(repoRoot)
+	err = git.WorktreePrune(mainRepoRoot)
 	if err != nil {
 		fprintf(stderr, "warning: git worktree prune failed: %v\n", err)
 	}
