@@ -182,3 +182,156 @@ func AssertNotContains(t *testing.T, content, substr string) {
 		t.Errorf("content should NOT contain %q\ncontent:\n%s", substr, content)
 	}
 }
+
+// extractPath extracts the path from wt create output.
+// Output format is:
+//
+//	Created worktree:
+//	  name:        swift-fox
+//	  ...
+//	  path:        /path/to/worktree
+//	  ...
+func extractPath(createOutput string) string {
+	return extractField(createOutput, "path")
+}
+
+// extractField extracts any field from wt create/info output.
+// Returns empty string if field not found.
+func extractField(output, field string) string {
+	prefix := field + ":"
+
+	for line := range strings.SplitSeq(output, "\n") {
+		line = strings.TrimSpace(line)
+		if after, ok := strings.CutPrefix(line, prefix); ok {
+			return strings.TrimSpace(after)
+		}
+	}
+
+	return ""
+}
+
+func Test_ExtractPath_Returns_Path_From_Create_Output(t *testing.T) {
+	t.Parallel()
+
+	output := `Created worktree:
+  name:        swift-fox
+  agent_id:    swift-fox
+  id:          1
+  path:        /home/user/code/worktrees/my-repo/swift-fox
+  branch:      swift-fox
+  from:        main`
+
+	got := extractPath(output)
+
+	want := "/home/user/code/worktrees/my-repo/swift-fox"
+	if got != want {
+		t.Errorf("extractPath() = %q, want %q", got, want)
+	}
+}
+
+func Test_ExtractPath_Returns_Empty_String_When_Path_Not_Found(t *testing.T) {
+	t.Parallel()
+
+	output := `Some other output
+without path field`
+
+	got := extractPath(output)
+	if got != "" {
+		t.Errorf("extractPath() = %q, want empty string", got)
+	}
+}
+
+func Test_ExtractField_Returns_Name_From_Output(t *testing.T) {
+	t.Parallel()
+
+	output := `Created worktree:
+  name:        swift-fox
+  agent_id:    brave-owl
+  id:          42
+  path:        /some/path
+  branch:      swift-fox
+  from:        main`
+
+	got := extractField(output, "name")
+
+	want := "swift-fox"
+	if got != want {
+		t.Errorf("extractField(name) = %q, want %q", got, want)
+	}
+}
+
+func Test_ExtractField_Returns_AgentID_From_Output(t *testing.T) {
+	t.Parallel()
+
+	output := `Created worktree:
+  name:        custom-name
+  agent_id:    brave-owl
+  id:          42
+  path:        /some/path`
+
+	got := extractField(output, "agent_id")
+
+	want := "brave-owl"
+	if got != want {
+		t.Errorf("extractField(agent_id) = %q, want %q", got, want)
+	}
+}
+
+func Test_ExtractField_Returns_ID_From_Output(t *testing.T) {
+	t.Parallel()
+
+	output := `Created worktree:
+  name:        swift-fox
+  id:          42
+  path:        /some/path`
+
+	got := extractField(output, "id")
+
+	want := "42"
+	if got != want {
+		t.Errorf("extractField(id) = %q, want %q", got, want)
+	}
+}
+
+func Test_ExtractField_Returns_Empty_String_When_Field_Not_Found(t *testing.T) {
+	t.Parallel()
+
+	output := `Created worktree:
+  name:        swift-fox
+  id:          1`
+
+	got := extractField(output, "nonexistent")
+	if got != "" {
+		t.Errorf("extractField(nonexistent) = %q, want empty string", got)
+	}
+}
+
+func Test_ExtractField_Works_With_Info_Output(t *testing.T) {
+	t.Parallel()
+
+	output := `name:        swift-fox
+agent_id:    swift-fox
+id:          42
+path:        /home/user/code/worktrees/my-repo/swift-fox
+base_branch: main
+created:     2025-01-04T10:30:00Z`
+
+	tests := []struct {
+		field string
+		want  string
+	}{
+		{"name", "swift-fox"},
+		{"agent_id", "swift-fox"},
+		{"id", "42"},
+		{"path", "/home/user/code/worktrees/my-repo/swift-fox"},
+		{"base_branch", "main"},
+		{"created", "2025-01-04T10:30:00Z"},
+	}
+
+	for _, tc := range tests {
+		got := extractField(output, tc.field)
+		if got != tc.want {
+			t.Errorf("extractField(%s) = %q, want %q", tc.field, got, tc.want)
+		}
+	}
+}
