@@ -221,7 +221,7 @@ echo "SOURCE=$WT_SOURCE"
 		"WT_AGENT_ID":    "swift-fox",
 		"WT_NAME":        "my-worktree",
 		"WT_PATH":        "/path/to/worktree",
-		"WT_BASE_BRANCH": "main",
+		"WT_BASE_BRANCH": "master",
 		"WT_REPO_ROOT":   "/path/to/repo",
 		"WT_SOURCE":      "/path/to/source",
 	}
@@ -248,7 +248,7 @@ echo "SOURCE=$WT_SOURCE"
 		"AGENT_ID=swift-fox",
 		"NAME=my-worktree",
 		"PATH_VAR=/path/to/worktree",
-		"BASE_BRANCH=main",
+		"BASE_BRANCH=master",
 		"REPO_ROOT=/path/to/repo",
 		"SOURCE=/path/to/source",
 	}
@@ -383,7 +383,7 @@ func Test_HookRunner_RunPostCreate_Calls_Hook(t *testing.T) {
 
 	runner := NewHookRunner(fsys, dir, map[string]string{"PATH": os.Getenv("PATH")}, &stdout, &stderr)
 
-	info := &WorktreeInfo{Name: "test", AgentID: "test-id", ID: 1, BaseBranch: "main"}
+	info := &WorktreeInfo{Name: "test", AgentID: "test-id", ID: 1, BaseBranch: "master"}
 
 	err = runner.RunPostCreate(context.Background(), info, "/wt/path", dir)
 	if err != nil {
@@ -424,7 +424,7 @@ func Test_HookRunner_RunPreDelete_Calls_Hook(t *testing.T) {
 
 	runner := NewHookRunner(fsys, dir, map[string]string{"PATH": os.Getenv("PATH")}, &stdout, &stderr)
 
-	info := &WorktreeInfo{Name: "test", AgentID: "test-id", ID: 1, BaseBranch: "main"}
+	info := &WorktreeInfo{Name: "test", AgentID: "test-id", ID: 1, BaseBranch: "master"}
 
 	err = runner.RunPreDelete(context.Background(), info, "/wt/path", dir)
 	if err != nil {

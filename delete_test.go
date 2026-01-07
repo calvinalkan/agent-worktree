@@ -399,7 +399,7 @@ func Test_Delete_Works_With_Manual_Worktree_Directory(t *testing.T) {
 	// Create a real git worktree using git command
 	wtPath := filepath.Join(wtBaseDir, "manual-wt")
 
-	cmd := testGitCmd("-C", c.Dir, "worktree", "add", "-b", "manual-wt", wtPath, "main")
+	cmd := testGitCmd("-C", c.Dir, "worktree", "add", "-b", "manual-wt", wtPath, "master")
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -411,7 +411,7 @@ func Test_Delete_Works_With_Manual_Worktree_Directory(t *testing.T) {
 		Name:       "manual-wt",
 		AgentID:    "manual-wt",
 		ID:         1,
-		BaseBranch: "main",
+		BaseBranch: "master",
 		Created:    time.Now().UTC(),
 	}
 

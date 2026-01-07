@@ -80,7 +80,7 @@ func Test_Info_Shows_Worktree_Info_In_Text_Format(t *testing.T) {
 	AssertContains(t, stdout, "agent_id:")
 	AssertContains(t, stdout, "id:")
 	AssertContains(t, stdout, "path:")
-	AssertContains(t, stdout, "base_branch: main")
+	AssertContains(t, stdout, "base_branch: master")
 	AssertContains(t, stdout, "created:")
 }
 
@@ -119,8 +119,8 @@ func Test_Info_Shows_Worktree_Info_In_JSON_Format(t *testing.T) {
 		t.Errorf("expected name 'json-info-wt', got %q", info.Name)
 	}
 
-	if info.BaseBranch != "main" {
-		t.Errorf("expected base_branch 'main', got %q", info.BaseBranch)
+	if info.BaseBranch != "master" {
+		t.Errorf("expected base_branch 'master', got %q", info.BaseBranch)
 	}
 }
 
@@ -146,7 +146,7 @@ func Test_Info_Field_Returns_Single_Value(t *testing.T) {
 		contains string
 	}{
 		{"name", "field-test-wt"},
-		{"base_branch", "main"},
+		{"base_branch", "master"},
 		{"id", ""}, // Can't predict ID value
 	}
 
@@ -235,5 +235,5 @@ func Test_Info_Works_From_Subdirectory(t *testing.T) {
 	}
 
 	AssertContains(t, stdout, "name:        subdir-test-wt")
-	AssertContains(t, stdout, "base_branch: main")
+	AssertContains(t, stdout, "base_branch: master")
 }

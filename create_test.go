@@ -52,7 +52,7 @@ func Test_Create_Creates_Worktree_With_Defaults(t *testing.T) {
 	AssertContains(t, stdout, "id:          1")
 
 	// from should be main (default branch)
-	AssertContains(t, stdout, "from:        main")
+	AssertContains(t, stdout, "from:        master")
 }
 
 func Test_Create_Creates_Worktree_Directory_And_Metadata(t *testing.T) {
@@ -123,7 +123,7 @@ func Test_Create_Creates_Worktree_Directory_And_Metadata(t *testing.T) {
 	}
 
 	if info.BaseBranch != testBaseBranchMain {
-		t.Errorf("expected base_branch 'main', got %q", info.BaseBranch)
+		t.Errorf("expected base_branch 'master', got %q", info.BaseBranch)
 	}
 }
 
@@ -404,7 +404,7 @@ func Test_Create_Hook_Receives_Environment_Variables(t *testing.T) {
 	// Check exact values
 	AssertContains(t, envContent, "WT_ID=1")
 	AssertContains(t, envContent, "WT_NAME=env-test")
-	AssertContains(t, envContent, "WT_BASE_BRANCH=main")
+	AssertContains(t, envContent, "WT_BASE_BRANCH=master")
 	AssertContains(t, envContent, "WT_REPO_ROOT="+cli.Dir)
 	AssertContains(t, envContent, "WT_SOURCE="+cli.Dir)
 	AssertContains(t, envContent, "WT_PATH="+filepath.Join(cli.Dir, "worktrees", "env-test"))
@@ -697,7 +697,7 @@ func Test_Create_JSON_Metadata_Is_Valid(t *testing.T) {
 	}
 
 	if metadata["base_branch"] != testBaseBranchMain {
-		t.Errorf("expected base_branch 'main', got %v", metadata["base_branch"])
+		t.Errorf("expected base_branch 'master', got %v", metadata["base_branch"])
 	}
 
 	// id should be a number

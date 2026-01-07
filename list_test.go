@@ -73,7 +73,7 @@ func Test_List_Shows_Worktrees_In_Table_Format(t *testing.T) {
 		Name:       "swift-fox",
 		AgentID:    "swift-fox",
 		ID:         1,
-		BaseBranch: "main",
+		BaseBranch: "master",
 		Created:    time.Now().UTC().Add(-2 * time.Hour),
 	}
 
@@ -216,7 +216,7 @@ func Test_List_Shows_Multiple_Worktrees(t *testing.T) {
 			Name:       wtData.name,
 			AgentID:    wtData.agentID,
 			ID:         wtData.id,
-			BaseBranch: "main",
+			BaseBranch: "master",
 			Created:    time.Now().UTC(),
 		}
 
@@ -274,7 +274,7 @@ func Test_List_Skips_Non_Managed_Directories(t *testing.T) {
 		Name:       "managed",
 		AgentID:    "swift-fox",
 		ID:         1,
-		BaseBranch: "main",
+		BaseBranch: "master",
 		Created:    time.Now().UTC(),
 	}
 
@@ -385,7 +385,7 @@ func Test_findWorktreesWithPaths_Returns_Paths(t *testing.T) {
 		Name:       "my-worktree",
 		AgentID:    "swift-fox",
 		ID:         1,
-		BaseBranch: "main",
+		BaseBranch: "master",
 		Created:    time.Now().UTC(),
 	}
 
@@ -409,5 +409,238 @@ func Test_findWorktreesWithPaths_Returns_Paths(t *testing.T) {
 
 	if worktrees[0].Name != "my-worktree" {
 		t.Errorf("expected name 'my-worktree', got %q", worktrees[0].Name)
+	}
+}
+
+// E2E tests that use wt create to create real worktrees
+
+func Test_List_Single_Worktree_Created_With_Create_Command(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a worktree using the create command
+	c.MustRun("--config", "config.json", "create", "--name", "test-wt")
+
+	stdout := c.MustRun("--config", "config.json", "list")
+
+	// Check table header
+	AssertContains(t, stdout, "NAME")
+	AssertContains(t, stdout, "PATH")
+	AssertContains(t, stdout, "CREATED")
+
+	// Check worktree appears
+	AssertContains(t, stdout, "test-wt")
+}
+
+func Test_List_Multiple_Worktrees_Created_With_Create_Command(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create multiple worktrees
+	c.MustRun("--config", "config.json", "create", "--name", "wt-one")
+	c.MustRun("--config", "config.json", "create", "--name", "wt-two")
+	c.MustRun("--config", "config.json", "create", "--name", "wt-three")
+
+	stdout := c.MustRun("--config", "config.json", "list")
+
+	// All worktrees should appear
+	AssertContains(t, stdout, "wt-one")
+	AssertContains(t, stdout, "wt-two")
+	AssertContains(t, stdout, "wt-three")
+}
+
+func Test_List_JSON_Parses_Correctly_For_Created_Worktree(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a worktree using the create command
+	c.MustRun("--config", "config.json", "create", "--name", "json-test")
+
+	stdout := c.MustRun("--config", "config.json", "list", "--json")
+
+	// Parse as JSON to verify structure
+	var worktrees []struct {
+		Name       string `json:"name"`
+		AgentID    string `json:"agent_id"`
+		ID         int    `json:"id"`
+		Path       string `json:"path"`
+		BaseBranch string `json:"base_branch"`
+		Created    string `json:"created"`
+	}
+
+	err := json.Unmarshal([]byte(stdout), &worktrees)
+	if err != nil {
+		t.Fatalf("invalid JSON output: %v\n%s", err, stdout)
+	}
+
+	if len(worktrees) != 1 {
+		t.Errorf("expected 1 worktree, got %d", len(worktrees))
+	}
+
+	wt := worktrees[0]
+
+	if wt.Name != "json-test" {
+		t.Errorf("expected name json-test, got %s", wt.Name)
+	}
+
+	if wt.ID != 1 {
+		t.Errorf("expected id 1, got %d", wt.ID)
+	}
+
+	if wt.BaseBranch != "master" {
+		t.Errorf("expected base_branch master, got %s", wt.BaseBranch)
+	}
+
+	// AgentID should be set (adjective-animal format)
+	if wt.AgentID == "" {
+		t.Error("expected agent_id to be set")
+	}
+
+	if !strings.Contains(wt.AgentID, "-") {
+		t.Errorf("expected agent_id in adjective-animal format, got: %s", wt.AgentID)
+	}
+
+	// Path should be absolute
+	if !filepath.IsAbs(wt.Path) {
+		t.Errorf("expected absolute path, got: %s", wt.Path)
+	}
+
+	// Created should be a valid ISO 8601 timestamp
+	if wt.Created == "" {
+		t.Error("expected created timestamp to be set")
+	}
+
+	if !strings.Contains(wt.Created, "T") || !strings.HasSuffix(wt.Created, "Z") {
+		t.Errorf("expected ISO 8601 UTC timestamp, got: %s", wt.Created)
+	}
+}
+
+func Test_List_JSON_Multiple_Worktrees_Returns_Correct_Count(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create multiple worktrees
+	c.MustRun("--config", "config.json", "create", "--name", "wt-alpha")
+	c.MustRun("--config", "config.json", "create", "--name", "wt-beta")
+
+	stdout := c.MustRun("--config", "config.json", "list", "--json")
+
+	var worktrees []jsonWorktree
+
+	err := json.Unmarshal([]byte(stdout), &worktrees)
+	if err != nil {
+		t.Fatalf("invalid JSON output: %v\n%s", err, stdout)
+	}
+
+	if len(worktrees) != 2 {
+		t.Errorf("expected 2 worktrees, got %d", len(worktrees))
+	}
+
+	// Verify both names are present
+	names := make(map[string]bool)
+	for _, wt := range worktrees {
+		names[wt.Name] = true
+	}
+
+	if !names["wt-alpha"] {
+		t.Error("wt-alpha not found in JSON output")
+	}
+
+	if !names["wt-beta"] {
+		t.Error("wt-beta not found in JSON output")
+	}
+}
+
+func Test_List_Shows_Worktree_From_Different_Base_Branch(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	// Create a develop branch
+	createBranch(t, c.Dir, "develop")
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create worktree from develop
+	c.MustRun("--config", "config.json", "create", "--name", "from-develop", "--from-branch", "develop")
+
+	stdout := c.MustRun("--config", "config.json", "list", "--json")
+
+	var worktrees []jsonWorktree
+
+	err := json.Unmarshal([]byte(stdout), &worktrees)
+	if err != nil {
+		t.Fatalf("invalid JSON output: %v\n%s", err, stdout)
+	}
+
+	if len(worktrees) != 1 {
+		t.Fatalf("expected 1 worktree, got %d", len(worktrees))
+	}
+
+	if worktrees[0].BaseBranch != "develop" {
+		t.Errorf("expected base_branch develop, got %s", worktrees[0].BaseBranch)
+	}
+}
+
+func Test_List_After_Delete_Shows_Remaining_Worktrees(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create two worktrees
+	c.MustRun("--config", "config.json", "create", "--name", "wt-keep")
+	c.MustRun("--config", "config.json", "create", "--name", "wt-delete")
+
+	// Verify both exist
+	stdout := c.MustRun("--config", "config.json", "list", "--json")
+
+	var worktrees []jsonWorktree
+
+	err := json.Unmarshal([]byte(stdout), &worktrees)
+	if err != nil {
+		t.Fatalf("invalid JSON output: %v\n%s", err, stdout)
+	}
+
+	if len(worktrees) != 2 {
+		t.Fatalf("expected 2 worktrees before delete, got %d", len(worktrees))
+	}
+
+	// Delete one worktree (force needed since .wt/worktree.json is uncommitted)
+	c.MustRun("--config", "config.json", "delete", "wt-delete", "--with-branch", "--force")
+
+	// Verify only one remains
+	stdout = c.MustRun("--config", "config.json", "list", "--json")
+
+	err = json.Unmarshal([]byte(stdout), &worktrees)
+	if err != nil {
+		t.Fatalf("invalid JSON output after delete: %v\n%s", err, stdout)
+	}
+
+	if len(worktrees) != 1 {
+		t.Errorf("expected 1 worktree after delete, got %d", len(worktrees))
+	}
+
+	if worktrees[0].Name != "wt-keep" {
+		t.Errorf("expected remaining worktree to be wt-keep, got %s", worktrees[0].Name)
 	}
 }

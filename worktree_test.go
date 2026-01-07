@@ -11,7 +11,7 @@ import (
 	"github.com/calvinalkan/agent-task/pkg/fs"
 )
 
-const testBaseBranchMain = "main"
+const testBaseBranchMain = "master"
 
 func Test_writeWorktreeInfo_Creates_Wt_Directory_And_Json_File(t *testing.T) {
 	t.Parallel()
@@ -123,7 +123,7 @@ func Test_readWorktreeInfo_Reads_Valid_Json(t *testing.T) {
   "name": "test-worktree",
   "agent_id": "quick-cat",
   "id": 99,
-  "base_branch": "main",
+  "base_branch": "master",
   "created": "2025-01-07T12:00:00Z"
 }`
 
@@ -152,7 +152,7 @@ func Test_readWorktreeInfo_Reads_Valid_Json(t *testing.T) {
 	}
 
 	if info.BaseBranch != testBaseBranchMain {
-		t.Errorf("expected base_branch 'main', got %q", info.BaseBranch)
+		t.Errorf("expected base_branch %q, got %q", testBaseBranchMain, info.BaseBranch)
 	}
 
 	expectedTime := time.Date(2025, 1, 7, 12, 0, 0, 0, time.UTC)

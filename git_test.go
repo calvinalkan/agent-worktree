@@ -82,7 +82,7 @@ func initRealGitRepo(t *testing.T, dir string) string {
 	t.Helper()
 
 	// Initialize git repo with main as initial branch
-	cmd := testGitCmd("init", "--initial-branch=main")
+	cmd := testGitCmd("init", "--initial-branch=master")
 	cmd.Dir = dir
 
 	out, err := cmd.CombinedOutput()
@@ -222,8 +222,8 @@ func Test_gitCurrentBranch_Returns_Branch_Name(t *testing.T) {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	if branch != "main" {
-		t.Errorf("expected branch 'main', got %q", branch)
+	if branch != testBaseBranchMain {
+		t.Errorf("expected branch %q, got %q", testBaseBranchMain, branch)
 	}
 }
 
@@ -325,7 +325,7 @@ func Test_gitWorktreeAdd_Creates_Worktree(t *testing.T) {
 	repoPath := initRealGitRepo(t, dir)
 	wtPath := filepath.Join(dir, "worktree-test")
 
-	err := git.WorktreeAdd(repoPath, wtPath, "feature-branch", "main")
+	err := git.WorktreeAdd(repoPath, wtPath, "feature-branch", "master")
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -356,7 +356,7 @@ func Test_gitWorktreeAdd_Returns_Error_When_Branch_Exists(t *testing.T) {
 	wtPath := filepath.Join(dir, "worktree-test")
 
 	// First create should succeed
-	err := git.WorktreeAdd(repoPath, wtPath, "feature-branch", "main")
+	err := git.WorktreeAdd(repoPath, wtPath, "feature-branch", "master")
 	if err != nil {
 		t.Fatalf("first worktree add failed: %v", err)
 	}
@@ -364,7 +364,7 @@ func Test_gitWorktreeAdd_Returns_Error_When_Branch_Exists(t *testing.T) {
 	// Second create with same branch should fail
 	wtPath2 := filepath.Join(dir, "worktree-test-2")
 
-	err = git.WorktreeAdd(repoPath, wtPath2, "feature-branch", "main")
+	err = git.WorktreeAdd(repoPath, wtPath2, "feature-branch", "master")
 	if err == nil {
 		t.Error("expected error for duplicate branch, got nil")
 	}
@@ -411,7 +411,7 @@ func Test_gitWorktreeRemove_Removes_Worktree(t *testing.T) {
 	wtPath := filepath.Join(dir, "worktree-test")
 
 	// Create worktree first
-	err := git.WorktreeAdd(repoPath, wtPath, "feature-branch", "main")
+	err := git.WorktreeAdd(repoPath, wtPath, "feature-branch", "master")
 	if err != nil {
 		t.Fatalf("worktree add failed: %v", err)
 	}
@@ -438,7 +438,7 @@ func Test_gitWorktreeRemove_Returns_Error_When_Dirty_Without_Force(t *testing.T)
 	wtPath := filepath.Join(dir, "worktree-test")
 
 	// Create worktree
-	err := git.WorktreeAdd(repoPath, wtPath, "feature-branch", "main")
+	err := git.WorktreeAdd(repoPath, wtPath, "feature-branch", "master")
 	if err != nil {
 		t.Fatalf("worktree add failed: %v", err)
 	}
@@ -464,7 +464,7 @@ func Test_gitWorktreeRemove_Removes_Dirty_Worktree_With_Force(t *testing.T) {
 	wtPath := filepath.Join(dir, "worktree-test")
 
 	// Create worktree
-	err := git.WorktreeAdd(repoPath, wtPath, "feature-branch", "main")
+	err := git.WorktreeAdd(repoPath, wtPath, "feature-branch", "master")
 	if err != nil {
 		t.Fatalf("worktree add failed: %v", err)
 	}
@@ -565,7 +565,7 @@ func Test_gitBranchDelete_Returns_Error_When_Branch_Not_Merged(t *testing.T) {
 	}
 
 	// Go back to main
-	cmd = testGitCmd("switch", "main")
+	cmd = testGitCmd("switch", "master")
 	cmd.Dir = repoPath
 
 	out, err = cmd.CombinedOutput()
@@ -618,7 +618,7 @@ func Test_gitBranchDelete_Force_Deletes_Unmerged_Branch(t *testing.T) {
 	}
 
 	// Go back to main
-	cmd = testGitCmd("switch", "main")
+	cmd = testGitCmd("switch", "master")
 	cmd.Dir = repoPath
 
 	out, err = cmd.CombinedOutput()
@@ -654,7 +654,7 @@ func Test_gitWorktreeList_Returns_Worktree_Paths(t *testing.T) {
 	// Add a worktree
 	wtPath := filepath.Join(dir, "worktree-1")
 
-	err = git.WorktreeAdd(repoPath, wtPath, "branch-1", "main")
+	err = git.WorktreeAdd(repoPath, wtPath, "branch-1", "master")
 	if err != nil {
 		t.Fatalf("worktree add failed: %v", err)
 	}
@@ -679,7 +679,7 @@ func Test_gitWorktreeList_Includes_Worktree_Path(t *testing.T) {
 	repoPath := initRealGitRepo(t, dir)
 	wtPath := filepath.Join(dir, "my-worktree")
 
-	err := git.WorktreeAdd(repoPath, wtPath, "my-branch", "main")
+	err := git.WorktreeAdd(repoPath, wtPath, "my-branch", "master")
 	if err != nil {
 		t.Fatalf("worktree add failed: %v", err)
 	}

@@ -100,7 +100,7 @@ func (c *CLI) InitGitRepo() {
 	// Write minimal HEAD file
 	headPath := filepath.Join(gitDir, "HEAD")
 
-	err = os.WriteFile(headPath, []byte("ref: refs/heads/main\n"), 0o644)
+	err = os.WriteFile(headPath, []byte("ref: refs/heads/master\n"), 0o644)
 	if err != nil {
 		c.t.Fatalf("failed to write HEAD: %v", err)
 	}
