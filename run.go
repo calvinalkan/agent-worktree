@@ -294,6 +294,57 @@ func IsTerminal() bool {
 	return (stat.Mode() & os.ModeCharDevice) != 0
 }
 
+// getRepoName extracts the repository name from the root path.
+// Returns the last path component (directory name).
+func getRepoName(repoRoot string) string {
+	return filepath.Base(repoRoot)
+}
+
+// resolveWorktreePath computes the full path for a new worktree.
+//
+// If base is absolute (starts with / or ~):
+//
+//	<base>/<repo-name>/<worktree-name>
+//
+// If base is relative:
+//
+//	<effective-cwd>/<base>/<worktree-name>
+//
+// Examples:
+//
+//	base=~/code/worktrees, repo=myapp, name=swift-fox
+//	  => /home/user/code/worktrees/myapp/swift-fox
+//
+//	base=../worktrees, cwd=/code/myapp, name=swift-fox
+//	  => /code/worktrees/swift-fox
+func resolveWorktreePath(cfg Config, repoRoot, worktreeName string) string {
+	base := ExpandPath(cfg.Base)
+
+	if IsAbsolutePath(cfg.Base) {
+		// Absolute: include repo name in path
+		repoName := getRepoName(repoRoot)
+
+		return filepath.Join(base, repoName, worktreeName)
+	}
+
+	// Relative: resolve from effective cwd, no repo name
+	return filepath.Join(cfg.EffectiveCwd, base, worktreeName)
+}
+
+// resolveWorktreeBaseDir returns the directory containing worktrees for a repo.
+// Used by list/delete to find existing worktrees.
+func resolveWorktreeBaseDir(cfg Config, repoRoot string) string {
+	base := ExpandPath(cfg.Base)
+
+	if IsAbsolutePath(cfg.Base) {
+		repoName := getRepoName(repoRoot)
+
+		return filepath.Join(base, repoName)
+	}
+
+	return filepath.Join(cfg.EffectiveCwd, base)
+}
+
 // WorktreeInfo holds metadata for a wt-managed worktree.
 // Stored in .wt/worktree.json within each worktree.
 type WorktreeInfo struct {

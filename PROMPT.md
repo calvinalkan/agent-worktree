@@ -15,7 +15,7 @@ Test names must be in the pattern of `Test_Foo_Does_Bar_When_Baz`
 
 Each command gets its own test file, e.g. `create_test.go`, `list_test.go`, etc.
 
-Run make lint and make test frequently.
+Run `make lint and make test frequently.
 
 When you think you are done, run `make check` for comprehensive tests.
 

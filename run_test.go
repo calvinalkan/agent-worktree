@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -138,4 +140,154 @@ func Test_Run_Uses_Custom_Config_When_Config_Flag(t *testing.T) {
 
 	_, _, code := c.Run("--config", "custom-config.json", "list")
 	_ = code
+}
+
+func Test_getRepoName_Returns_Last_Path_Component(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		repoRoot string
+		want     string
+	}{
+		{"/home/user/code/my-repo", "my-repo"},
+		{"/code/project", "project"},
+		{"my-repo", "my-repo"},
+		{"/", "/"},
+	}
+
+	for _, tt := range tests {
+		got := getRepoName(tt.repoRoot)
+		if got != tt.want {
+			t.Errorf("getRepoName(%q) = %q, want %q", tt.repoRoot, got, tt.want)
+		}
+	}
+}
+
+func Test_resolveWorktreePath_Absolute_Base_Includes_Repo_Name(t *testing.T) {
+	t.Parallel()
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("cannot get home dir: %v", err)
+	}
+
+	cfg := Config{
+		Base:         "~/code/worktrees",
+		EffectiveCwd: "/some/other/path",
+	}
+
+	got := resolveWorktreePath(cfg, "/home/user/repos/my-app", "swift-fox")
+	want := filepath.Join(home, "code", "worktrees", "my-app", "swift-fox")
+
+	if got != want {
+		t.Errorf("resolveWorktreePath() = %q, want %q", got, want)
+	}
+}
+
+func Test_resolveWorktreePath_Absolute_Base_With_Slash(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{
+		Base:         "/var/worktrees",
+		EffectiveCwd: "/some/other/path",
+	}
+
+	got := resolveWorktreePath(cfg, "/home/user/repos/project", "brave-owl")
+	want := "/var/worktrees/project/brave-owl"
+
+	if got != want {
+		t.Errorf("resolveWorktreePath() = %q, want %q", got, want)
+	}
+}
+
+func Test_resolveWorktreePath_Relative_Base_Uses_EffectiveCwd(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{
+		Base:         "../worktrees",
+		EffectiveCwd: "/home/user/code/my-repo",
+	}
+
+	got := resolveWorktreePath(cfg, "/home/user/code/my-repo", "calm-deer")
+	want := "/home/user/code/my-repo/../worktrees/calm-deer"
+
+	// Clean for comparison
+	got = filepath.Clean(got)
+	want = filepath.Clean(want)
+
+	if got != want {
+		t.Errorf("resolveWorktreePath() = %q, want %q", got, want)
+	}
+}
+
+func Test_resolveWorktreePath_Relative_Base_No_Repo_Name(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{
+		Base:         "worktrees",
+		EffectiveCwd: "/code/project",
+	}
+
+	got := resolveWorktreePath(cfg, "/code/project", "swift-fox")
+	want := "/code/project/worktrees/swift-fox"
+
+	if got != want {
+		t.Errorf("resolveWorktreePath() = %q, want %q", got, want)
+	}
+}
+
+func Test_resolveWorktreeBaseDir_Absolute_Includes_Repo_Name(t *testing.T) {
+	t.Parallel()
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("cannot get home dir: %v", err)
+	}
+
+	cfg := Config{
+		Base:         "~/code/worktrees",
+		EffectiveCwd: "/other/path",
+	}
+
+	got := resolveWorktreeBaseDir(cfg, "/home/user/repos/my-project")
+	want := filepath.Join(home, "code", "worktrees", "my-project")
+
+	if got != want {
+		t.Errorf("resolveWorktreeBaseDir() = %q, want %q", got, want)
+	}
+}
+
+func Test_resolveWorktreeBaseDir_Relative_Uses_EffectiveCwd(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{
+		Base:         "../worktrees",
+		EffectiveCwd: "/code/my-repo",
+	}
+
+	got := resolveWorktreeBaseDir(cfg, "/code/my-repo")
+	want := "/code/my-repo/../worktrees"
+
+	got = filepath.Clean(got)
+	want = filepath.Clean(want)
+
+	if got != want {
+		t.Errorf("resolveWorktreeBaseDir() = %q, want %q", got, want)
+	}
+}
+
+func Test_resolveWorktreeBaseDir_Relative_No_Repo_Name(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{
+		Base:         "worktrees",
+		EffectiveCwd: "/code/project",
+	}
+
+	got := resolveWorktreeBaseDir(cfg, "/code/project")
+	want := "/code/project/worktrees"
+
+	if got != want {
+		t.Errorf("resolveWorktreeBaseDir() = %q, want %q", got, want)
+	}
 }
