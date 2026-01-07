@@ -211,6 +211,10 @@ linters:
         text: "G204:"
         linters:
           - gosec
+      - path: hooks\.go
+        text: "G204:" # hooks execute user-provided scripts by design
+        linters:
+          - gosec
 
 formatters:
   enable:
