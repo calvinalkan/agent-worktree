@@ -662,3 +662,296 @@ func Test_Config_List_Works_With_Tilde_In_Path(t *testing.T) {
 		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
 	}
 }
+
+// Tests for unknown flag handling across all commands
+
+func Test_Run_Create_Fails_With_Error_When_Unknown_Flag(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	_, stderr, code := c.Run("create", "--bogus")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "unknown flag: --bogus")
+	AssertContains(t, stderr, "Usage:")
+}
+
+func Test_Run_List_Fails_With_Error_When_Unknown_Flag(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	_, stderr, code := c.Run("list", "--foo")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "unknown flag: --foo")
+	AssertContains(t, stderr, "Usage:")
+}
+
+func Test_Run_Info_Fails_With_Error_When_Unknown_Flag(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	_, stderr, code := c.Run("info", "--bar")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "unknown flag: --bar")
+	AssertContains(t, stderr, "Usage:")
+}
+
+func Test_Run_Delete_Fails_With_Error_When_Unknown_Flag(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	_, stderr, code := c.Run("delete", "somename", "--baz")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "unknown flag: --baz")
+	AssertContains(t, stderr, "Usage:")
+}
+
+func Test_Run_Fails_With_Error_When_Unknown_Global_Flag(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+
+	_, stderr, code := c.Run("--unknown", "list")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "unknown flag: --unknown")
+	AssertContains(t, stderr, "Usage:")
+}
+
+// Tests for global flag validation
+
+func Test_Run_Fails_When_Cwd_Directory_Does_Not_Exist(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+
+	// Use a completely non-existent path
+	_, stderr, code := c.RunWithInput(nil, "--cwd", "/nonexistent/path/that/does/not/exist", "list")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	// Should start with "error:" for consistent parsing
+	AssertContains(t, stderr, "error:")
+}
+
+func Test_Run_Fails_When_Config_File_Has_Invalid_JSON(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("bad.json", "{invalid json content}")
+
+	_, stderr, code := c.Run("--config", "bad.json", "list")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "error:")
+	AssertContains(t, stderr, "parsing config")
+}
+
+// Tests for error message format consistency
+
+func Test_Run_Error_Messages_Start_With_Error_Prefix_For_Unknown_Command(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+
+	_, stderr, code := c.Run("boguscmd")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "error:")
+}
+
+func Test_Run_Error_Messages_Start_With_Error_Prefix_For_Delete_Without_Arg(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	_, stderr, code := c.Run("delete")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "error:")
+}
+
+func Test_Run_Error_Messages_Start_With_Error_Prefix_For_Info_Outside_Worktree(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	_, stderr, code := c.Run("info")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "error:")
+}
+
+func Test_Run_Error_Messages_Start_With_Error_Prefix_For_Not_Git_Repository(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	// Don't init git repo
+
+	_, stderr, code := c.Run("list")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "error:")
+}
+
+func Test_Run_Error_Messages_Start_With_Error_Prefix_For_Create_Not_Git_Repository(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	// Don't init git repo
+
+	_, stderr, code := c.Run("create")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "error:")
+}
+
+func Test_Run_Error_Messages_Start_With_Error_Prefix_For_Unknown_Flag(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+
+	_, stderr, code := c.Run("--badglobalflag")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "error:")
+}
+
+func Test_Run_Delete_Fails_When_Worktree_Not_Found(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	_, stderr, code := c.Run("delete", "nonexistent-worktree")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "error:")
+	AssertContains(t, stderr, "worktree not found")
+}
+
+func Test_Run_Info_Fails_With_Invalid_Field_Name(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	// Use relative base to isolate this test's worktrees
+	c.WriteFile(".wt/config.json", `{"base": "worktrees"}`)
+
+	// First create a worktree so we can test --field with it
+	stdout, stderr, code := c.Run("create", "--name", "field-test-wt")
+	if code != 0 {
+		t.Fatalf("failed to create worktree: %s", stderr)
+	}
+
+	wtPath := extractPath(stdout)
+
+	// Now run info from the worktree with an invalid field
+	wt := NewCLITesterAt(t, wtPath)
+
+	_, stderr, code = wt.Run("info", "--field", "invalidfield")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "error:")
+	AssertContains(t, stderr, "invalid field")
+}
+
+func Test_Run_Create_Fails_When_Branch_Already_Exists(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	// Use relative base to isolate this test's worktrees
+	c.WriteFile(".wt/config.json", `{"base": "worktrees"}`)
+
+	// First create a worktree with a specific name
+	c.MustRun("create", "--name", "branch-exists-test")
+
+	// Try to create another worktree with the same name - should fail
+	_, stderr, code := c.Run("create", "--name", "branch-exists-test")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "error:")
+}
+
+func Test_Run_Create_Fails_When_From_Branch_Does_Not_Exist(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	// Use relative base to isolate this test's worktrees
+	c.WriteFile(".wt/config.json", `{"base": "worktrees"}`)
+
+	_, stderr, code := c.Run("create", "--from-branch", "nonexistent-branch")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "error:")
+}
