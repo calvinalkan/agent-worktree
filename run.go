@@ -16,6 +16,15 @@ import (
 	"github.com/calvinalkan/agent-task/pkg/fs"
 )
 
+// Version information. Set via ldflags during build:
+//
+//	go build -ldflags "-X main.version=1.0.0 -X main.commit=abc123 -X main.date=2025-01-07"
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 // Run is the main entry point. Returns exit code.
 // sigCh can be nil if signal handling is not needed (e.g., in tests).
 func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[string]string, sigCh <-chan os.Signal) int {
@@ -26,6 +35,7 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 	globalFlags.SetOutput(&strings.Builder{})
 
 	flagHelp := globalFlags.BoolP("help", "h", false, "Show help")
+	flagVersion := globalFlags.BoolP("version", "v", false, "Show version and exit")
 	flagCwd := globalFlags.StringP("cwd", "C", "", "Run as if started in `dir`")
 	flagConfig := globalFlags.StringP("config", "c", "", "Use specified config `file`")
 
@@ -35,6 +45,13 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 		printGlobalOptions(stderr)
 
 		return 1
+	}
+
+	// Handle --version early, before loading config
+	if *flagVersion {
+		fprintf(stdout, "wt %s (%s, %s)\n", version, commit, date)
+
+		return 0
 	}
 
 	// Create filesystem abstraction
@@ -141,6 +158,7 @@ func fprintf(output io.Writer, format string, a ...any) {
 }
 
 const globalOptionsHelp = `  -h, --help             Show help
+  -v, --version          Show version and exit
   -C, --cwd <dir>        Run as if started in <dir>
   -c, --config <file>    Use specified config file`
 

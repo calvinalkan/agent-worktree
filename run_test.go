@@ -48,6 +48,48 @@ func Test_Run_Shows_Help_When_H_Flag(t *testing.T) {
 	AssertContains(t, stdout, "Commands:")
 }
 
+func Test_Run_Shows_Version_When_Version_Flag(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	stdout, _, code := c.Run("--version")
+
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+
+	AssertContains(t, stdout, "wt")
+	// Default version is "dev" when not built with ldflags
+	AssertContains(t, stdout, "dev")
+}
+
+func Test_Run_Shows_Version_When_V_Flag(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	stdout, _, code := c.Run("-v")
+
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+
+	AssertContains(t, stdout, "wt")
+}
+
+func Test_Run_Version_Flag_In_Help_Output(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	stdout, _, code := c.Run("--help")
+
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+
+	AssertContains(t, stdout, "--version")
+	AssertContains(t, stdout, "Show version")
+}
+
 func Test_Run_Fails_When_Unknown_Command(t *testing.T) {
 	t.Parallel()
 
