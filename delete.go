@@ -32,7 +32,7 @@ Use --with-branch to also delete the git branch.`,
 	}
 }
 
-func execDelete(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, cfg Config, fsys fs.FS, flags *flag.FlagSet, args []string) error {
+func execDelete(_ context.Context, _ io.Reader, stdout, _ io.Writer, _ Config, _ fs.FS, flags *flag.FlagSet, args []string) error {
 	if len(args) == 0 {
 		return errWorktreeNameRequired
 	}
@@ -41,12 +41,12 @@ func execDelete(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, 
 	force, _ := flags.GetBool("force")
 	withBranch, _ := flags.GetBool("with-branch")
 
-	// TODO: Implement
+	// Stub - implementation pending.
 	_ = name
 	_ = force
 	_ = withBranch
-	_ = fsys
 
 	fprintln(stdout, "delete: not implemented yet")
+
 	return nil
 }

@@ -1,7 +1,8 @@
 ---
 schema_version: 1
 id: d5fattr
-status: in_progress
+status: closed
+closed: 2026-01-07T19:53:02Z
 blocked-by: []
 created: 2026-01-07T19:00:59Z
 type: task

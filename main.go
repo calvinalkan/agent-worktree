@@ -8,12 +8,6 @@ import (
 	"syscall"
 )
 
-const (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
-)
-
 func main() {
 	environ := os.Environ()
 	env := make(map[string]string, len(environ))

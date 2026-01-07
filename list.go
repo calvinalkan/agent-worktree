@@ -19,19 +19,19 @@ func ListCmd(cfg Config, fsys fs.FS) *Command {
 		Usage: "list [flags]",
 		Short: "List worktrees for current repo",
 		Long:  `List all worktrees managed by wt for the current repository.`,
-		Exec: func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, args []string) error {
-			return execList(ctx, stdin, stdout, stderr, cfg, fsys, flags)
+		Exec: func(_ context.Context, stdin io.Reader, stdout, stderr io.Writer, _ []string) error {
+			return execList(stdin, stdout, stderr, cfg, fsys, flags)
 		},
 	}
 }
 
-func execList(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, cfg Config, fsys fs.FS, flags *flag.FlagSet) error {
+func execList(_ io.Reader, stdout, _ io.Writer, _ Config, _ fs.FS, flags *flag.FlagSet) error {
 	jsonOutput, _ := flags.GetBool("json")
 
-	// TODO: Implement
+	// Stub - implementation pending.
 	_ = jsonOutput
-	_ = fsys
 
 	fprintln(stdout, "list: not implemented yet")
+
 	return nil
 }

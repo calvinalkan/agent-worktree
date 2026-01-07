@@ -17,7 +17,7 @@ import (
 
 // Run is the main entry point. Returns exit code.
 // sigCh can be nil if signal handling is not needed (e.g., in tests).
-func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[string]string, sigCh <-chan os.Signal) int {
+func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, _ map[string]string, sigCh <-chan os.Signal) int {
 	// Create fresh global flags for this invocation
 	globalFlags := flag.NewFlagSet("wt", flag.ContinueOnError)
 	globalFlags.SetInterspersed(false)
@@ -28,9 +28,11 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 	flagCwd := globalFlags.StringP("cwd", "C", "", "Run as if started in `dir`")
 	flagConfig := globalFlags.StringP("config", "c", "", "Use specified config `file`")
 
-	if err := globalFlags.Parse(args[1:]); err != nil {
+	err := globalFlags.Parse(args[1:])
+	if err != nil {
 		fprintln(stderr, "error:", err)
 		printGlobalOptions(stderr)
+
 		return 1
 	}
 
@@ -44,6 +46,7 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 	})
 	if err != nil {
 		fprintln(stderr, "error:", err)
+
 		return 1
 	}
 
@@ -64,6 +67,7 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 	// Show help: explicit --help or bare `wt` with no args
 	if *flagHelp || len(commandAndArgs) == 0 {
 		printUsage(stdout, commands)
+
 		return 0
 	}
 
@@ -74,6 +78,7 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 	if !ok {
 		fprintln(stderr, "error: unknown command:", cmdName)
 		printUsage(stderr, commands)
+
 		return 1
 	}
 
@@ -105,49 +110,52 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 	select {
 	case <-done:
 		fprintln(stderr, "graceful shutdown ok (130)")
+
 		return 130
 	case <-time.After(5 * time.Second):
 		fprintln(stderr, "graceful shutdown timed out, forced exit (130)")
+
 		return 130
 	case <-sigCh:
 		fprintln(stderr, "graceful shutdown interrupted, forced exit (130)")
+
 		return 130
 	}
 }
 
-func fprintln(w io.Writer, a ...any) {
-	_, _ = fmt.Fprintln(w, a...)
+func fprintln(output io.Writer, a ...any) {
+	_, _ = fmt.Fprintln(output, a...)
 }
 
-func fprintf(w io.Writer, format string, a ...any) {
-	_, _ = fmt.Fprintf(w, format, a...)
+func fprintf(output io.Writer, format string, a ...any) {
+	_, _ = fmt.Fprintf(output, format, a...)
 }
 
 const globalOptionsHelp = `  -h, --help             Show help
   -C, --cwd <dir>        Run as if started in <dir>
   -c, --config <file>    Use specified config file`
 
-func printGlobalOptions(w io.Writer) {
-	fprintln(w, "Usage: wt [flags] <command> [args]")
-	fprintln(w)
-	fprintln(w, "Global flags:")
-	fprintln(w, globalOptionsHelp)
-	fprintln(w)
-	fprintln(w, "Run 'wt --help' for a list of commands.")
+func printGlobalOptions(output io.Writer) {
+	fprintln(output, "Usage: wt [flags] <command> [args]")
+	fprintln(output)
+	fprintln(output, "Global flags:")
+	fprintln(output, globalOptionsHelp)
+	fprintln(output)
+	fprintln(output, "Run 'wt --help' for a list of commands.")
 }
 
-func printUsage(w io.Writer, commands []*Command) {
-	fprintln(w, "wt - git worktree manager")
-	fprintln(w)
-	fprintln(w, "Usage: wt [flags] <command> [args]")
-	fprintln(w)
-	fprintln(w, "Flags:")
-	fprintln(w, globalOptionsHelp)
-	fprintln(w)
-	fprintln(w, "Commands:")
+func printUsage(output io.Writer, commands []*Command) {
+	fprintln(output, "wt - git worktree manager")
+	fprintln(output)
+	fprintln(output, "Usage: wt [flags] <command> [args]")
+	fprintln(output)
+	fprintln(output, "Flags:")
+	fprintln(output, globalOptionsHelp)
+	fprintln(output)
+	fprintln(output, "Commands:")
 
 	for _, cmd := range commands {
-		fprintln(w, cmd.HelpLine())
+		fprintln(output, cmd.HelpLine())
 	}
 }
 
@@ -178,6 +186,7 @@ func LoadConfig(fsys fs.FS, input LoadConfigInput) (Config, error) {
 	workDir := input.WorkDirOverride
 	if workDir == "" {
 		var err error
+
 		workDir, err = os.Getwd()
 		if err != nil {
 			return Config{}, fmt.Errorf("cannot get working directory: %w", err)
@@ -190,19 +199,21 @@ func LoadConfig(fsys fs.FS, input LoadConfigInput) (Config, error) {
 		if err != nil {
 			return Config{}, fmt.Errorf("cannot get working directory: %w", err)
 		}
+
 		workDir = filepath.Join(cwd, workDir)
 	}
 
 	configPath := input.ConfigPath
 	if configPath == "" {
-		// Use default location
-		home, err := os.UserHomeDir()
-		if err != nil {
+		// Use default location - if home dir unavailable, use defaults
+		configPath = defaultConfigPath()
+
+		if configPath == "" {
 			cfg := DefaultConfig()
 			cfg.EffectiveCwd = workDir
+
 			return cfg, nil
 		}
-		configPath = filepath.Join(home, ".config", "wt", "config.json")
 	}
 
 	data, err := fsys.ReadFile(configPath)
@@ -210,13 +221,17 @@ func LoadConfig(fsys fs.FS, input LoadConfigInput) (Config, error) {
 		if os.IsNotExist(err) {
 			cfg := DefaultConfig()
 			cfg.EffectiveCwd = workDir
+
 			return cfg, nil
 		}
+
 		return Config{}, fmt.Errorf("reading config: %w", err)
 	}
 
 	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
+
+	err = json.Unmarshal(data, &cfg)
+	if err != nil {
 		return Config{}, fmt.Errorf("parsing config: %w", err)
 	}
 
@@ -226,7 +241,19 @@ func LoadConfig(fsys fs.FS, input LoadConfigInput) (Config, error) {
 	}
 
 	cfg.EffectiveCwd = workDir
+
 	return cfg, nil
+}
+
+// defaultConfigPath returns the default config file path.
+// Returns empty string if home directory cannot be determined.
+func defaultConfigPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+
+	return filepath.Join(home, ".config", "wt", "config.json")
 }
 
 // ExpandPath expands ~ to home directory.
@@ -236,8 +263,10 @@ func ExpandPath(path string) string {
 		if err != nil {
 			return path
 		}
+
 		return filepath.Join(home, path[2:])
 	}
+
 	return path
 }
 
@@ -252,5 +281,6 @@ func IsTerminal() bool {
 	if err != nil {
 		return false
 	}
+
 	return (stat.Mode() & os.ModeCharDevice) != 0
 }

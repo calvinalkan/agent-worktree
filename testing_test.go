@@ -91,6 +91,7 @@ func (c *CLI) InitGitRepo() {
 
 	// Create minimal git repo
 	gitDir := filepath.Join(c.Dir, ".git")
+
 	err := os.MkdirAll(gitDir, 0o750)
 	if err != nil {
 		c.t.Fatalf("failed to create .git dir: %v", err)
@@ -98,6 +99,7 @@ func (c *CLI) InitGitRepo() {
 
 	// Write minimal HEAD file
 	headPath := filepath.Join(gitDir, "HEAD")
+
 	err = os.WriteFile(headPath, []byte("ref: refs/heads/main\n"), 0o644)
 	if err != nil {
 		c.t.Fatalf("failed to write HEAD: %v", err)

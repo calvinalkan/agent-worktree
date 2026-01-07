@@ -24,23 +24,23 @@ func CreateCmd(cfg Config, fsys fs.FS) *Command {
 
 A random agent_id is generated (e.g., swift-fox) and used as the default
 worktree name. Use --name to override.`,
-		Exec: func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, args []string) error {
+		Exec: func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, _ []string) error {
 			return execCreate(ctx, stdin, stdout, stderr, cfg, fsys, flags)
 		},
 	}
 }
 
-func execCreate(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, cfg Config, fsys fs.FS, flags *flag.FlagSet) error {
+func execCreate(_ context.Context, _ io.Reader, stdout, _ io.Writer, _ Config, _ fs.FS, flags *flag.FlagSet) error {
 	name, _ := flags.GetString("name")
 	fromBranch, _ := flags.GetString("from-branch")
 	copyChanges, _ := flags.GetBool("copy-changes")
 
-	// TODO: Implement
+	// Stub - implementation pending.
 	_ = name
 	_ = fromBranch
 	_ = copyChanges
-	_ = fsys
 
 	fprintln(stdout, "create: not implemented yet")
+
 	return nil
 }

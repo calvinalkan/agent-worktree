@@ -34,6 +34,7 @@ type Command struct {
 // Name returns the command name (first word of Usage).
 func (c *Command) Name() string {
 	name, _, _ := strings.Cut(c.Usage, " ")
+
 	return name
 }
 
@@ -43,24 +44,25 @@ func (c *Command) HelpLine() string {
 }
 
 // PrintHelp prints the full help output for "wt <cmd> --help".
-func (c *Command) PrintHelp(w io.Writer) {
-	fprintln(w, "Usage: wt", c.Usage)
-	fprintln(w)
+func (c *Command) PrintHelp(output io.Writer) {
+	fprintln(output, "Usage: wt", c.Usage)
+	fprintln(output)
 
 	desc := c.Long
 	if desc == "" {
 		desc = c.Short
 	}
-	fprintln(w, desc)
+
+	fprintln(output, desc)
 
 	if c.Flags != nil && c.Flags.HasFlags() {
-		fprintln(w)
-		fprintln(w, "Flags:")
+		fprintln(output)
+		fprintln(output, "Flags:")
 
 		var buf strings.Builder
 		c.Flags.SetOutput(&buf)
 		c.Flags.PrintDefaults()
-		fprintf(w, "%s", buf.String())
+		fprintf(output, "%s", buf.String())
 	}
 }
 
@@ -72,23 +74,29 @@ func (c *Command) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Wr
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			c.PrintHelp(stdout)
+
 			return 0
 		}
 
 		fprintln(stderr, "error:", err)
 		fprintln(stderr)
 		c.PrintHelp(stderr)
+
 		return 1
 	}
 
 	// Check if help was requested
-	if help, _ := c.Flags.GetBool("help"); help {
+	help, _ := c.Flags.GetBool("help")
+	if help {
 		c.PrintHelp(stdout)
+
 		return 0
 	}
 
-	if err := c.Exec(ctx, stdin, stdout, stderr, c.Flags.Args()); err != nil {
+	err = c.Exec(ctx, stdin, stdout, stderr, c.Flags.Args())
+	if err != nil {
 		fprintln(stderr, "error:", err)
+
 		return 1
 	}
 

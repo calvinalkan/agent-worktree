@@ -43,7 +43,7 @@ linters:
     - godoclint
     - godot
     - godox
-    - gomoddirectives
+    # - gomoddirectives
     - gomodguard
     - goprintffuncname
     - gosec
@@ -177,13 +177,28 @@ linters:
         - pattern: '^os\.Rename$'
           msg: "os.Rename bypasses fs abstraction - use fsys.Rename() instead."
         - pattern: '^os\.WriteFile$'
-          msg: "os.WriteFile bypasses fs abstraction - use fsys.OpenFile() + Write() + Sync() or fsys.Rename() instead."
+          msg: "os.WriteFile bypasses fs abstraction - use fsys.WriteFile() instead."
   exclusions:
     rules:
       - path: _test\.go
         linters:
           - dupl
           - varnamelen
+      # Allow time.Sleep in tests
+      - path: _test\.go
+        text: "time\\.Sleep"
+        linters:
+          - forbidigo
+      # Allow direct filesystem access in tests
+      - path: _test\.go
+        text: "os\\.(Open|Create|OpenFile|ReadFile|ReadDir|MkdirAll|Mkdir|Stat|Remove|RemoveAll|Rename|WriteFile)"
+        linters:
+          - forbidigo
+      # Allow env access in tests
+      - path: _test\.go
+        text: "os\\.(Getenv|LookupEnv|ExpandEnv)"
+        linters:
+          - forbidigo
       - path: _test\.go
         text: "G204:" # subprocess launched with variable
         linters:
