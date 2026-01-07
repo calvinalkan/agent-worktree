@@ -1,0 +1,9 @@
+# Build output
+wt
+
+# Test binaries
+*.test
+
+.tickets/.cache
+
+.tickets/.locks/

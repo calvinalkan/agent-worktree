@@ -1,0 +1,207 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - canonicalheader
+    - containedctx
+    - contextcheck
+    - copyloopvar
+    # - cyclop
+    - decorder
+    - dogsled
+    - dupl
+    - dupword
+    - durationcheck
+    - embeddedstructfieldcheck
+    - err113
+    - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - exptostd
+    - fatcontext
+    - forbidigo
+    - forcetypeassert
+    - funcorder
+    # - funlen
+    - gocheckcompilerdirectives
+    # - gochecknoglobals
+    - gochecknoinits
+    - gochecksumtype
+    # - gocognit
+    - goconst
+    - gocritic
+    # - gocyclo
+    - godoclint
+    - godot
+    - godox
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - gosmopolitan
+    - govet
+    - grouper
+    - iface
+    - importas
+    - inamedparam
+    - ineffassign
+    - interfacebloat
+    - intrange
+    - iotamixing
+    - ireturn
+    # - lll
+    - loggercheck
+    # - maintidx
+    - makezero
+    - mirror
+    - misspell
+    # - mnd
+    - musttag
+    - nakedret
+    # - nestif
+    - nilerr
+    - nilnesserr
+    - nilnil
+    - nlreturn
+    # - noctx
+    - noinlineerr
+    - nolintlint
+    - nonamedreturns
+    - nosprintfhostport
+    - paralleltest
+    - perfsprint
+    - prealloc
+    - predeclared
+    - promlinter
+    - protogetter
+    - reassign
+    - recvcheck
+    - revive
+    - rowserrcheck
+    - sloglint
+    - spancheck
+    - sqlclosecheck
+    - staticcheck
+    - tagalign
+    # - tagliatelle
+    - testableexamples
+    - testifylint
+    - testpackage
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - unqueryvet
+    - unused
+    - usestdlibvars
+    - usetesting
+    - varnamelen
+    - wastedassign
+    - whitespace
+    - wrapcheck
+    - wsl_v5
+    - zerologlint
+  settings:
+    cyclop:
+      max-complexity: 15
+    gocyclo:
+      min-complexity: 15
+    gocognit:
+      min-complexity: 20
+    funlen:
+      lines: 80
+      statements: 50
+    lll:
+      line-length: 120
+    nestif:
+      min-complexity: 5
+    nakedret:
+      max-func-lines: 0
+    varnamelen:
+      min-name-length: 2
+      ignore-names:
+        - i
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+        - experimental
+        - opinionated
+      disabled-checks:
+        - paramTypeCombine
+        - unnamedResult
+    gosec:
+      excludes:
+        - G304 # file inclusion via variable - we use paths from ReadDir
+    forbidigo:
+      forbid:
+        - pattern: '^time\.Sleep$'
+          msg: "time.Sleep is flaky in tests (use testing/synctest) and usually wrong in production (use tickers, timers, or context)."
+        - pattern: '^os\.Getenv$'
+          msg: "os.Getenv bypasses env abstraction - use the env map passed to Run() instead."
+        - pattern: '^os\.LookupEnv$'
+          msg: "os.LookupEnv bypasses env abstraction - use the env map passed to Run() instead."
+        - pattern: '^os\.ExpandEnv$'
+          msg: "os.ExpandEnv bypasses env abstraction - use the env map passed to Run() instead."
+        # Filesystem operations - use fs.FS abstraction instead
+        - pattern: '^os\.Open$'
+          msg: "os.Open bypasses fs abstraction - use fsys.Open() instead."
+        - pattern: '^os\.Create$'
+          msg: "os.Create bypasses fs abstraction - use fsys.Create() instead."
+        - pattern: '^os\.OpenFile$'
+          msg: "os.OpenFile bypasses fs abstraction - use fsys.OpenFile() instead."
+        - pattern: '^os\.ReadFile$'
+          msg: "os.ReadFile bypasses fs abstraction - use fsys.ReadFile() instead."
+        - pattern: '^os\.ReadDir$'
+          msg: "os.ReadDir bypasses fs abstraction - use fsys.ReadDir() instead."
+        - pattern: '^os\.MkdirAll$'
+          msg: "os.MkdirAll bypasses fs abstraction - use fsys.MkdirAll() instead."
+        - pattern: '^os\.Mkdir$'
+          msg: "os.Mkdir bypasses fs abstraction - use fsys.MkdirAll() instead."
+        - pattern: '^os\.Stat$'
+          msg: "os.Stat bypasses fs abstraction - use fsys.Stat() instead."
+        - pattern: '^os\.Remove$'
+          msg: "os.Remove bypasses fs abstraction - use fsys.Remove() instead."
+        - pattern: '^os\.RemoveAll$'
+          msg: "os.RemoveAll bypasses fs abstraction - use fsys.RemoveAll() instead."
+        - pattern: '^os\.Rename$'
+          msg: "os.Rename bypasses fs abstraction - use fsys.Rename() instead."
+        - pattern: '^os\.WriteFile$'
+          msg: "os.WriteFile bypasses fs abstraction - use fsys.OpenFile() + Write() + Sync() or fsys.Rename() instead."
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - dupl
+          - varnamelen
+      - path: _test\.go
+        text: "G204:" # subprocess launched with variable
+        linters:
+          - gosec
+      - path: _test\.go
+        text: "G306:" # file permissions > 0600
+        linters:
+          - gosec
+      - path: main\.go
+        text: "G204:"
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - tk
