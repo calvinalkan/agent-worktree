@@ -19,8 +19,8 @@ const hookTimeout = 5 * time.Minute
 
 // Hook errors.
 var (
-	ErrHookNotExecutable = errors.New("hook exists but is not executable")
-	ErrHookTimeout       = errors.New("hook timed out")
+	ErrHookNotExecutable = errors.New("hook not executable")
+	ErrHookTimeout       = errors.New("hook timed out (hook may be stuck or waiting for input)")
 	ErrHookFailed        = errors.New("hook failed")
 )
 
@@ -101,7 +101,7 @@ func runHook(
 
 	// Check if executable
 	if info.Mode()&0o111 == 0 {
-		return fmt.Errorf("%w: %s", ErrHookNotExecutable, hookPath)
+		return fmt.Errorf("%w: %s (fix with: chmod +x %s)", ErrHookNotExecutable, hookPath, hookPath)
 	}
 
 	// Build command with timeout

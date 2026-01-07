@@ -10,14 +10,14 @@ import (
 
 // Static errors for git operations.
 var (
-	ErrNotGitRepository  = errors.New("not a git repository")
-	ErrGitWorktreeAdd    = errors.New("git worktree add failed")
-	ErrGitWorktreeRemove = errors.New("git worktree remove failed")
-	ErrGitWorktreePrune  = errors.New("git worktree prune failed")
-	ErrGitWorktreeList   = errors.New("git worktree list failed")
-	ErrGitBranchDelete   = errors.New("git branch delete failed")
-	ErrGitCurrentBranch  = errors.New("failed to get current branch")
-	ErrGitStatusCheck    = errors.New("failed to check git status")
+	ErrNotGitRepository  = errors.New("not a git repository (use -C to specify repo path)")
+	ErrGitWorktreeAdd    = errors.New("creating worktree")
+	ErrGitWorktreeRemove = errors.New("removing worktree")
+	ErrGitWorktreePrune  = errors.New("pruning worktree metadata")
+	ErrGitWorktreeList   = errors.New("listing worktrees")
+	ErrGitBranchDelete   = errors.New("deleting branch")
+	ErrGitCurrentBranch  = errors.New("getting current branch")
+	ErrGitStatusCheck    = errors.New("checking git status")
 )
 
 // Git provides git operations with explicit environment control.

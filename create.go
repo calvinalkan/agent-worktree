@@ -14,7 +14,7 @@ import (
 )
 
 // ErrNameAlreadyInUse is returned when the requested worktree name is already in use.
-var ErrNameAlreadyInUse = errors.New("name already in use")
+var ErrNameAlreadyInUse = errors.New("name already in use (use wt list to see worktrees)")
 
 // CreateCmd returns the create command.
 func CreateCmd(cfg Config, fsys fs.FS, git *Git, env map[string]string) *Command {
@@ -88,7 +88,7 @@ func execCreate(
 	if baseBranch == "" {
 		baseBranch, err = git.CurrentBranch(cfg.EffectiveCwd)
 		if err != nil {
-			return fmt.Errorf("cannot determine current branch: %w", err)
+			return fmt.Errorf("getting current branch (use --from-branch if in detached HEAD): %w", err)
 		}
 	}
 
@@ -107,7 +107,7 @@ func execCreate(
 
 	lock, err := locker.LockWithTimeout(lockPath, createLockTimeout)
 	if err != nil {
-		return fmt.Errorf("acquiring create lock: %w", err)
+		return fmt.Errorf("acquiring create lock (another wt process may be running): %w", err)
 	}
 
 	defer func() { _ = lock.Close() }()
@@ -202,7 +202,7 @@ func execCreate(
 		brErr := git.BranchDelete(mainRepoRoot, name, true)
 
 		return errors.Join(
-			fmt.Errorf("post-create hook failed: %w", err),
+			fmt.Errorf("post-create hook failed (check hook output above): %w", err),
 			rmErr,
 			brErr,
 		)

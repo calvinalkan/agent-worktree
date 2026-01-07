@@ -16,13 +16,13 @@ import (
 
 // Errors for delete command.
 var (
-	errWorktreeNameRequired     = errors.New("worktree name is required")
+	errWorktreeNameRequired     = errors.New("worktree name is required (usage: wt delete <name>)")
 	errWorktreeNotFound         = errors.New("worktree not found")
 	errWorktreeHasChanges       = errors.New("worktree has uncommitted changes (use --force to override)")
-	errRemovingWorktreeFailed   = errors.New("failed to remove worktree")
-	errCheckingWorktreeStatus   = errors.New("failed to check worktree status")
-	errReadingWorktreeInfo      = errors.New("failed to read worktree info")
-	errPreDeleteHookAbortDelete = errors.New("deletion aborted by pre-delete hook")
+	errRemovingWorktreeFailed   = errors.New("removing worktree")
+	errCheckingWorktreeStatus   = errors.New("checking worktree status")
+	errReadingWorktreeInfo      = errors.New("reading worktree info")
+	errPreDeleteHookAbortDelete = errors.New("pre-delete hook aborted deletion (hook exited non-zero)")
 )
 
 // DeleteCmd returns the delete command.

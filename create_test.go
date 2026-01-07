@@ -278,7 +278,7 @@ func Test_Create_Returns_Error_When_Branch_Already_Exists(t *testing.T) {
 		t.Errorf("expected exit code 1, got %d", code)
 	}
 
-	AssertContains(t, stderr, "git worktree add failed")
+	AssertContains(t, stderr, "creating worktree")
 }
 
 func Test_Create_Runs_Post_Create_Hook(t *testing.T) {
@@ -1064,7 +1064,7 @@ exit 1
 	AssertContains(t, stderr, "post-create hook failed")
 
 	// Should see rollback error because git couldn't access .git/worktrees
-	AssertContains(t, stderr, "git worktree remove failed")
+	AssertContains(t, stderr, "removing worktree")
 }
 
 func Test_Create_Rollback_Includes_Both_Errors_When_Both_Operations_Fail(t *testing.T) {
@@ -1100,10 +1100,10 @@ exit 1
 	AssertContains(t, stderr, "post-create hook failed")
 
 	// Should see worktree remove error
-	AssertContains(t, stderr, "git worktree remove failed")
+	AssertContains(t, stderr, "removing worktree")
 
 	// Should see branch delete error
-	AssertContains(t, stderr, "git branch delete failed")
+	AssertContains(t, stderr, "deleting branch")
 }
 
 // Tests for concurrent worktree creation

@@ -291,7 +291,7 @@ func Test_Delete_Aborts_When_PreDelete_Hook_Fails(t *testing.T) {
 		t.Errorf("expected exit code 1, got %d", code)
 	}
 
-	AssertContains(t, stderr, "deletion aborted")
+	AssertContains(t, stderr, "pre-delete hook aborted deletion")
 
 	// Worktree should still exist
 	if !c.FileExists("worktrees/abort-wt/.wt/worktree.json") {

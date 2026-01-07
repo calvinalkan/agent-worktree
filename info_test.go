@@ -211,6 +211,7 @@ func Test_Info_Field_Returns_Error_For_Invalid_Field(t *testing.T) {
 	}
 
 	AssertContains(t, stderr, "invalid field")
+	AssertContains(t, stderr, "valid: name, agent_id, id, path, base_branch, created")
 }
 
 func Test_Info_Appears_In_Help_Output(t *testing.T) {

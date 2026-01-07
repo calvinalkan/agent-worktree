@@ -14,9 +14,9 @@ import (
 
 // Errors for info command.
 var (
-	errNotInWorktree        = errors.New("not in a wt-managed worktree")
+	errNotInWorktree        = errors.New("not in a wt-managed worktree (use wt list to find worktrees)")
 	errWorktreeInfoNotFound = errors.New("worktree info not found (.wt/worktree.json missing)")
-	errInvalidField         = errors.New("invalid field")
+	errInvalidField         = errors.New("invalid field (valid: name, agent_id, id, path, base_branch, created)")
 )
 
 // InfoCmd returns the info command.

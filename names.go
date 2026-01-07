@@ -8,7 +8,7 @@ import (
 )
 
 // ErrNameGenerationFailed is returned when a unique agent_id cannot be generated.
-var ErrNameGenerationFailed = errors.New("failed to generate unique agent_id after 10 attempts")
+var ErrNameGenerationFailed = errors.New("generating unique name after 10 attempts (too many worktrees? use --name to specify)")
 
 // adjectives for agent_id generation (~50 words).
 var adjectives = []string{
