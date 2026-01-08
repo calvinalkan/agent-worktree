@@ -92,6 +92,7 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 		LsCmd(cfg, fsys, git),
 		InfoCmd(cfg, fsys, git),
 		RemoveCmd(cfg, fsys, git, env),
+		MergeCmd(cfg, fsys, git, env),
 		InitCmd(),
 	}
 
