@@ -127,28 +127,29 @@ func execDelete(
 	// Non-interactive without --with-branch: keep branch (deleteBranch stays false)
 
 	// 7. Delete branch if requested
+	var branchErr error
+
+	branchDeleted := false
+
 	if deleteBranch {
-		err = git.BranchDelete(ctx, mainRepoRoot, name, force)
-		if err != nil {
-			// Log but don't fail - worktree already deleted
-			fprintf(stderr, "warning: could not delete branch %s: %v\n", name, err)
+		branchErr = git.BranchDelete(ctx, mainRepoRoot, name, force)
+		if branchErr == nil {
+			branchDeleted = true
 		}
 	}
 
-	// 8. Prune worktree metadata
-	err = git.WorktreePrune(ctx, mainRepoRoot)
-	if err != nil {
-		fprintf(stderr, "warning: git worktree prune failed: %v\n", err)
-	}
+	// 8. Prune worktree metadata (always run, independent of branch deletion)
+	pruneErr := git.WorktreePrune(ctx, mainRepoRoot)
 
-	// 9. Output success
-	if deleteBranch {
+	// 9. Output what actually happened
+	if branchDeleted {
 		fprintln(stdout, "Deleted worktree and branch:", name)
 	} else {
 		fprintln(stdout, "Deleted worktree:", name)
 	}
 
-	return nil
+	// 10. Return combined errors if any
+	return errors.Join(branchErr, pruneErr)
 }
 
 // promptYesNo prompts the user for yes/no confirmation.
