@@ -32,9 +32,10 @@ func CreateCmd(cfg Config, fsys fs.FS, git *Git, env map[string]string) *Command
 	flags.BoolP("switch", "s", false, "Output only the path (for use with cd)")
 
 	return &Command{
-		Flags: flags,
-		Usage: "create [flags]",
-		Short: "Create a new worktree",
+		Flags:   flags,
+		Usage:   "create [flags]",
+		Short:   "Create a new worktree",
+		Aliases: []string{"new"},
 		Long: `Create a new worktree with auto-generated name and unique ID.
 
 A git branch is created with the same name as the worktree. The worktree
