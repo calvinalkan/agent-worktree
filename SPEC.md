@@ -90,7 +90,7 @@ Project and user configs are merged, with project config taking precedence for o
 
 **Base path resolution**:
 - Absolute path (starts with `/` or `~`): worktrees created at `<base>/<repo-name>/<worktree-name>/`
-- Relative path: worktrees created at `<base>/<worktree-name>/` (no repo name inserted)
+- Relative path: resolved relative to main repository root, worktrees created at `<base>/<worktree-name>/` (no repo name inserted)
 
 ---
 

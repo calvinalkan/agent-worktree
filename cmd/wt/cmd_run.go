@@ -405,14 +405,14 @@ func getRepoName(repoRoot string) string {
 //
 // If base is relative:
 //
-//	<effective-cwd>/<base>/<worktree-name>
+//	<main-repo-root>/<base>/<worktree-name>
 //
 // Examples:
 //
 //	base=~/code/worktrees, repo=myapp, name=swift-fox
 //	  => /home/user/code/worktrees/myapp/swift-fox
 //
-//	base=../worktrees, cwd=/code/myapp, name=swift-fox
+//	base=../worktrees, main-repo=/code/myapp, name=swift-fox
 //	  => /code/worktrees/swift-fox
 func resolveWorktreePath(cfg Config, mainRepoRoot, worktreeName string) string {
 	base := ExpandPath(cfg.Base)
