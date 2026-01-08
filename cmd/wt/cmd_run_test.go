@@ -80,6 +80,8 @@ func Test_Run_Shows_Version_When_Version_Flag(t *testing.T) {
 	AssertContains(t, stdout, "wt")
 	// Default version is "dev" when not built with ldflags
 	AssertContains(t, stdout, "dev")
+	// When built from source (no ldflags), show cleaner output
+	AssertContains(t, stdout, "built from source")
 }
 
 func Test_Run_Shows_Version_When_V_Flag(t *testing.T) {

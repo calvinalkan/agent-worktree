@@ -49,7 +49,11 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 
 	// Handle --version early, before loading config
 	if *flagVersion {
-		fprintf(stdout, "wt %s (%s, %s)\n", version, commit, date)
+		if commit == "none" && date == "unknown" {
+			fprintf(stdout, "wt %s (built from source)\n", version)
+		} else {
+			fprintf(stdout, "wt %s (%s, %s)\n", version, commit, date)
+		}
 
 		return 0
 	}
