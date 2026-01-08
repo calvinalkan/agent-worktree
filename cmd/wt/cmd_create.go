@@ -18,6 +18,9 @@ import (
 // ErrNameAlreadyInUse is returned when the requested worktree name is already in use.
 var ErrNameAlreadyInUse = errors.New("name already in use (use wt list to see worktrees)")
 
+// errSwitchAndJSONMutuallyExclusive is returned when both --switch and --json are specified.
+var errSwitchAndJSONMutuallyExclusive = errors.New("cannot use --switch and --json together")
+
 // CreateCmd returns the create command.
 func CreateCmd(cfg Config, fsys fs.FS, git *Git, env map[string]string) *Command {
 	flags := flag.NewFlagSet("create", flag.ContinueOnError)
@@ -26,6 +29,7 @@ func CreateCmd(cfg Config, fsys fs.FS, git *Git, env map[string]string) *Command
 	flags.StringP("from-branch", "b", "", "Branch to base off (default: current branch)")
 	flags.Bool("with-changes", false, "Copy staged, unstaged, and untracked files to new worktree")
 	flags.Bool("json", false, "Output as JSON")
+	flags.BoolP("switch", "s", false, "Output only the path (for use with cd)")
 
 	return &Command{
 		Flags: flags,
@@ -44,8 +48,13 @@ If .wt/hooks/post-create exists and is executable, it runs after creation.`,
 			fromBranch, _ := flags.GetString("from-branch")
 			withChanges, _ := flags.GetBool("with-changes")
 			jsonOutput, _ := flags.GetBool("json")
+			switchOutput, _ := flags.GetBool("switch")
 
-			return execCreate(ctx, stdout, stderr, cfg, fsys, git, env, customName, fromBranch, withChanges, jsonOutput)
+			if jsonOutput && switchOutput {
+				return errSwitchAndJSONMutuallyExclusive
+			}
+
+			return execCreate(ctx, stdout, stderr, cfg, fsys, git, env, customName, fromBranch, withChanges, jsonOutput, switchOutput)
 		},
 	}
 }
@@ -115,7 +124,7 @@ func execCreate(
 	git *Git,
 	env map[string]string,
 	customName, fromBranch string,
-	withChanges, jsonOutput bool,
+	withChanges, jsonOutput, switchOutput bool,
 ) error {
 	// 1. Verify git repository and get main repo root
 	// MainRepoRoot returns the main repo's root even when inside a worktree,
@@ -271,6 +280,12 @@ func execCreate(
 	}
 
 	// 14. Print success output
+	if switchOutput {
+		fprintln(stdout, wtPath)
+
+		return nil
+	}
+
 	if jsonOutput {
 		return outputCreateJSON(stdout, name, agentID, nextID, wtPath, baseBranch)
 	}

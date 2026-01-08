@@ -1994,3 +1994,124 @@ func listBranches(t *testing.T, repoDir string) []string {
 
 	return branches
 }
+
+func Test_Create_Switch_Flag_Outputs_Only_Path(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "--switch", "--name", "switch-test")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// Output should be just the path, nothing else
+	path := strings.TrimSpace(stdout)
+
+	// Should not contain any other output
+	if strings.Contains(path, "Created") {
+		t.Errorf("--switch output should not contain 'Created', got: %s", stdout)
+	}
+
+	if strings.Contains(path, "name:") {
+		t.Errorf("--switch output should not contain 'name:', got: %s", stdout)
+	}
+
+	// Should be a valid path containing the worktree name
+	if !strings.Contains(path, "switch-test") {
+		t.Errorf("expected path to contain 'switch-test', got: %s", path)
+	}
+
+	// Path should exist
+	_, err := os.Stat(path)
+	if err != nil {
+		t.Errorf("path should exist: %v", err)
+	}
+}
+
+func Test_Create_Switch_Short_Flag_Outputs_Only_Path(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "-s", "--name", "short-switch")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	path := strings.TrimSpace(stdout)
+
+	if !strings.Contains(path, "short-switch") {
+		t.Errorf("expected path to contain 'short-switch', got: %s", path)
+	}
+
+	// Should be just one line
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(lines) != 1 {
+		t.Errorf("expected single line output, got %d lines: %s", len(lines), stdout)
+	}
+}
+
+func Test_Create_Switch_Flag_Works_With_Other_Flags(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	// Create a feature branch
+	createBranch(t, cli.Dir, "feature")
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "--switch", "--name", "from-feature", "--from-branch", "feature")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	path := strings.TrimSpace(stdout)
+
+	if !strings.Contains(path, "from-feature") {
+		t.Errorf("expected path to contain 'from-feature', got: %s", path)
+	}
+}
+
+func Test_Create_Switch_And_JSON_Flags_Are_Mutually_Exclusive(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--switch", "--json")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "cannot use --switch and --json together")
+}
+
+func Test_Create_Help_Shows_Switch_Flag(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+
+	stdout, _, code := cli.Run("create", "--help")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d", code)
+	}
+
+	AssertContains(t, stdout, "--switch")
+	AssertContains(t, stdout, "-s")
+}
