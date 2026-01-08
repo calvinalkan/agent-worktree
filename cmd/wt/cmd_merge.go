@@ -16,35 +16,21 @@ import (
 
 // Errors for merge command.
 var (
-	errReadingMergeMetadata   = errors.New("reading worktree metadata")
-	errValidatingBranches     = errors.New("validating branches")
-	errCheckingMergeWorktree  = errors.New("checking worktree status")
-	errCheckingTargetWorktree = errors.New("checking target worktree")
-	errRebasingOnto           = errors.New("rebasing onto")
-	errMergingInto            = errors.New("merging into")
-	errMergeConflict          = errors.New("conflict during rebase")
-	errTargetBranchNotExist   = errors.New("branch does not exist")
-	errAlreadyOnTarget        = errors.New("already on target branch, nothing to merge")
-	errUncommittedChanges     = errors.New("uncommitted changes")
-	errTargetHasChanges       = errors.New("has uncommitted changes")
-	errNotInMergeWorktree     = errors.New("are you in a wt-managed worktree?")
-	errMergeCancelled         = errors.New("merge cancelled")
-	errAcquiringMergeLock     = errors.New("acquiring merge lock")
-	errMergeLockTimedOut      = errors.New("timed out waiting for merge lock - another merge may be stuck")
+	errReadingMergeMetadata  = errors.New("reading worktree metadata")
+	errValidatingBranches    = errors.New("validating branches")
+	errCheckingMergeWorktree = errors.New("checking worktree status")
+	errCheckingTargetBranch  = errors.New("checking target branch")
+	errRebasingOnto          = errors.New("rebasing onto")
+	errMergingInto           = errors.New("merging into")
+	errMergeConflict         = errors.New("conflict during rebase")
+	errTargetBranchNotExist  = errors.New("branch does not exist")
+	errAlreadyOnTarget       = errors.New("already on target branch, nothing to merge")
+	errUncommittedChanges    = errors.New("uncommitted changes")
+	errTargetHasChanges      = errors.New("has uncommitted changes")
+	errMergeCancelled        = errors.New("merge cancelled")
+	errAcquiringMergeLock    = errors.New("acquiring merge lock")
+	errMergeLockTimedOut     = errors.New("timed out waiting for merge lock - another merge may be stuck")
 )
-
-const (
-	maxMergeRetries  = 3
-	mergeBaseDelay   = 100 * time.Millisecond
-	mergeMaxDelay    = 2 * time.Second
-	mergeLockTimeout = 30 * time.Second
-)
-
-// mergeLockPath returns the path to the lock file for merge operations.
-// Placed in git common directory so all worktrees share the same lock.
-func mergeLockPath(gitCommonDir string) string {
-	return gitCommonDir + "/wt-merge.lock"
-}
 
 // MergeCmd returns the merge command.
 func MergeCmd(cfg Config, fsys fs.FS, git *Git, env map[string]string) *Command {
@@ -71,6 +57,13 @@ automatically retries with exponential backoff.`,
 	}
 }
 
+const (
+	maxMergeRetries  = 3
+	mergeBaseDelay   = 100 * time.Millisecond
+	mergeMaxDelay    = 2 * time.Second
+	mergeLockTimeout = 30 * time.Second
+)
+
 func execMerge(
 	ctx context.Context,
 	stdout, stderr io.Writer,
@@ -89,7 +82,7 @@ func execMerge(
 	// 1. Read metadata
 	info, err := readWorktreeInfo(fsys, cfg.EffectiveCwd)
 	if err != nil {
-		return fmt.Errorf("%w: %w (%w)", errReadingMergeMetadata, err, errNotInMergeWorktree)
+		return err
 	}
 
 	// Get current branch (feature)
@@ -143,7 +136,7 @@ func execMerge(
 	// 4. Check target worktree clean (if checked out somewhere)
 	targetWtPath, err := git.FindWorktreeForBranch(ctx, cfg.EffectiveCwd, targetBranch)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errCheckingTargetWorktree, err)
+		return fmt.Errorf("%w '%s': %w", errCheckingTargetBranch, targetBranch, err)
 	}
 
 	if targetWtPath != "" {
@@ -151,11 +144,11 @@ func execMerge(
 		// Untracked files (like newly created worktree directories) don't affect merges
 		targetDirty, dirtyErr := git.HasUncommittedTrackedChanges(ctx, targetWtPath)
 		if dirtyErr != nil {
-			return fmt.Errorf("%w: %w", errCheckingTargetWorktree, dirtyErr)
+			return fmt.Errorf("%w '%s': %w", errCheckingTargetBranch, targetBranch, dirtyErr)
 		}
 
 		if targetDirty {
-			return fmt.Errorf("%w: '%s' %w (commit or stash there first)", errCheckingTargetWorktree, targetWtPath, errTargetHasChanges)
+			return fmt.Errorf("%w '%s': '%s' %w (commit or stash there first)", errCheckingTargetBranch, targetBranch, targetWtPath, errTargetHasChanges)
 		}
 	}
 
@@ -218,7 +211,10 @@ func mergeWithLock(
 	}
 
 	defer func() {
-		_ = lock.Close()
+		closeErr := lock.Close()
+		if closeErr != nil {
+			fprintln(stderr, "warning: failed to release merge lock:", closeErr)
+		}
 	}()
 
 	// Rebase onto target (under lock, so target can't move)
@@ -226,12 +222,16 @@ func mergeWithLock(
 	if err != nil {
 		if isConflict(err) {
 			// Get conflicting files for better error message
-			files, _ := git.ConflictingFiles(ctx, wtPath)
+			files, filesErr := git.ConflictingFiles(ctx, wtPath)
 
 			// Abort rebase to leave clean state
-			_ = git.RebaseAbort(ctx, wtPath)
+			abortErr := git.RebaseAbort(ctx, wtPath)
 
-			return formatConflictError(targetBranch, files)
+			return errors.Join(
+				formatConflictError(targetBranch, files),
+				filesErr,
+				abortErr,
+			)
 		}
 
 		// Unknown error - try to abort rebase
@@ -417,4 +417,10 @@ func printDryRun(
 	fprintln(stdout, "No changes made.")
 
 	return nil
+}
+
+// mergeLockPath returns the path to the lock file for merge operations.
+// Placed in git common directory so all worktrees share the same lock.
+func mergeLockPath(gitCommonDir string) string {
+	return gitCommonDir + "/wt-merge.lock"
 }

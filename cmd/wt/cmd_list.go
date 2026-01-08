@@ -42,7 +42,7 @@ func execList(ctx context.Context, _ io.Reader, stdout, stderr io.Writer, cfg Co
 	// Get main repo root (works from inside worktrees too)
 	mainRepoRoot, err := git.MainRepoRoot(ctx, cfg.EffectiveCwd)
 	if err != nil {
-		return ErrNotGitRepository
+		return err
 	}
 
 	// Find worktrees

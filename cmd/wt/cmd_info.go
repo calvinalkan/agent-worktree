@@ -16,7 +16,6 @@ import (
 // Errors for info command.
 var (
 	errNotInWorktree        = errors.New("this is a regular branch, not a worktree (use wt list to find worktrees)")
-	errWorktreeInfoNotFound = errors.New("worktree info not found (.wt/worktree.json missing)")
 	errInvalidField         = errors.New("invalid field (valid: name, agent_id, id, path, base_branch, created)")
 	errWorktreeNotFoundInfo = errors.New("worktree not found")
 )
@@ -70,7 +69,7 @@ func execInfo(
 	// Get main repo root (works from inside worktrees too)
 	mainRepoRoot, err := git.MainRepoRoot(ctx, cfg.EffectiveCwd)
 	if err != nil {
-		return ErrNotGitRepository
+		return err
 	}
 
 	var info WorktreeInfo
@@ -104,7 +103,7 @@ func execInfo(
 
 		info, err = readWorktreeInfo(fsys, wtPath)
 		if err != nil {
-			return fmt.Errorf("%w: %w", errWorktreeInfoNotFound, err)
+			return err
 		}
 	}
 

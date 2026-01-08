@@ -49,8 +49,7 @@ func Test_Merge_Returns_Error_When_Not_In_Worktree(t *testing.T) {
 		t.Errorf("expected exit code 1, got %d", code)
 	}
 
-	AssertContains(t, stderr, "reading worktree metadata")
-	AssertContains(t, stderr, "are you in a wt-managed worktree")
+	AssertContains(t, stderr, "not a wt-managed worktree")
 }
 
 func Test_Merge_Returns_Error_When_Target_Branch_Not_Exist(t *testing.T) {
@@ -496,7 +495,7 @@ func Test_Merge_Dirty_Target_Worktree_Errors(t *testing.T) {
 		t.Errorf("expected exit code 1, got %d", code)
 	}
 
-	AssertContains(t, stderr, "checking target worktree")
+	AssertContains(t, stderr, "checking target branch")
 	AssertContains(t, stderr, "has uncommitted changes")
 }
 

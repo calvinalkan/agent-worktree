@@ -132,7 +132,7 @@ func execCreate(
 	// ensuring all worktrees share the same base directory and lock file.
 	mainRepoRoot, err := git.MainRepoRoot(ctx, cfg.EffectiveCwd)
 	if err != nil {
-		return ErrNotGitRepository
+		return err
 	}
 
 	// 2. Get git common directory (shared across all worktrees) for locking

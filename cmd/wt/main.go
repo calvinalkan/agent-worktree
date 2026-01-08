@@ -8,6 +8,15 @@ import (
 	"syscall"
 )
 
+// Version information. Set via ldflags during build:
+//
+//	go build -ldflags "-X main.version=1.0.0 -X main.commit=abc123 -X main.date=2025-01-07"
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	environ := os.Environ()
 	env := make(map[string]string, len(environ))

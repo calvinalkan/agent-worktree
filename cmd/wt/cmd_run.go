@@ -16,15 +16,6 @@ import (
 	"github.com/calvinalkan/agent-task/pkg/fs"
 )
 
-// Version information. Set via ldflags during build:
-//
-//	go build -ldflags "-X main.version=1.0.0 -X main.commit=abc123 -X main.date=2025-01-07"
-var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
-)
-
 // Run is the main entry point. Returns exit code.
 // sigCh can be nil if signal handling is not needed (e.g., in tests).
 func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[string]string, sigCh <-chan os.Signal) int {
@@ -533,13 +524,20 @@ func writeWorktreeInfo(fsys fs.FS, wtPath string, info *WorktreeInfo) error {
 	return nil
 }
 
+// ErrNotWtWorktree indicates the directory is not a wt-managed worktree.
+var ErrNotWtWorktree = errors.New("not a wt-managed worktree (run from a worktree created with 'wt create')")
+
 // readWorktreeInfo reads metadata from .wt/worktree.json in the worktree.
-// Returns os.ErrNotExist if the file doesn't exist.
+// Returns ErrNotWtWorktree if the file doesn't exist.
 func readWorktreeInfo(fsys fs.FS, wtPath string) (WorktreeInfo, error) {
 	infoPath := filepath.Join(wtPath, ".wt", "worktree.json")
 
 	data, readErr := fsys.ReadFile(infoPath)
 	if readErr != nil {
+		if errors.Is(readErr, os.ErrNotExist) {
+			return WorktreeInfo{}, ErrNotWtWorktree
+		}
+
 		return WorktreeInfo{}, fmt.Errorf("reading worktree.json: %w", readErr)
 	}
 

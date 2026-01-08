@@ -172,9 +172,9 @@ func Test_readWorktreeInfo_Returns_Error_When_File_Not_Exists(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	// Error should mention the file
-	if !strings.Contains(err.Error(), "worktree.json") {
-		t.Errorf("error should mention worktree.json: %v", err)
+	// Error should be ErrNotWtWorktree
+	if !errors.Is(err, ErrNotWtWorktree) {
+		t.Errorf("expected ErrNotWtWorktree, got: %v", err)
 	}
 }
 
@@ -517,7 +517,7 @@ func Test_writeWorktreeInfo_Returns_Error_When_Cannot_Create_Directory(t *testin
 	}
 }
 
-func Test_readWorktreeInfo_Wrapped_Error_Contains_Original(t *testing.T) {
+func Test_readWorktreeInfo_Returns_ErrNotWtWorktree_When_Missing(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -529,8 +529,8 @@ func Test_readWorktreeInfo_Wrapped_Error_Contains_Original(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	// The error should be wrapped and contain os.ErrNotExist
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("expected error to wrap os.ErrNotExist, got: %v", err)
+	// The error should be ErrNotWtWorktree for missing file
+	if !errors.Is(err, ErrNotWtWorktree) {
+		t.Errorf("expected ErrNotWtWorktree, got: %v", err)
 	}
 }

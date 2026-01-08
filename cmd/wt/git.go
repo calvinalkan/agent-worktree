@@ -22,6 +22,11 @@ var (
 	ErrGitRebase         = errors.New("rebase failed")
 	ErrGitRebaseAbort    = errors.New("aborting rebase")
 	ErrGitMerge          = errors.New("merge failed")
+	ErrGitPushLocal      = errors.New("updating local branch")
+	ErrGitDiff           = errors.New("getting diff")
+	ErrGitBranchCheck    = errors.New("checking branch")
+	ErrGitConflictCheck  = errors.New("checking conflicts")
+	ErrGitCommitCount    = errors.New("counting commits")
 )
 
 // Git provides git operations with explicit environment control.
@@ -44,7 +49,7 @@ func (g *Git) RepoRoot(ctx context.Context, cwd string) (string, error) {
 
 	out, err := cmd.Output()
 	if err != nil {
-		return "", ErrNotGitRepository
+		return "", fmt.Errorf("%w: %w", ErrNotGitRepository, err)
 	}
 
 	return strings.TrimSpace(string(out)), nil
@@ -59,7 +64,7 @@ func (g *Git) GitCommonDir(ctx context.Context, cwd string) (string, error) {
 
 	out, err := cmd.Output()
 	if err != nil {
-		return "", ErrNotGitRepository
+		return "", fmt.Errorf("%w: %w", ErrNotGitRepository, err)
 	}
 
 	return strings.TrimSpace(string(out)), nil
@@ -127,7 +132,7 @@ func (g *Git) WorktreeAdd(ctx context.Context, repoRoot, wtPath, branch, baseBra
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrGitWorktreeAdd, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%w: %w: %s", ErrGitWorktreeAdd, err, strings.TrimSpace(string(out)))
 	}
 
 	return nil
@@ -144,7 +149,7 @@ func (g *Git) WorktreeRemove(ctx context.Context, repoRoot, wtPath string, force
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrGitWorktreeRemove, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%w: %w: %s", ErrGitWorktreeRemove, err, strings.TrimSpace(string(out)))
 	}
 
 	return nil
@@ -156,7 +161,7 @@ func (g *Git) WorktreePrune(ctx context.Context, repoRoot string) error {
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrGitWorktreePrune, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%w: %w: %s", ErrGitWorktreePrune, err, strings.TrimSpace(string(out)))
 	}
 
 	return nil
@@ -173,7 +178,7 @@ func (g *Git) BranchDelete(ctx context.Context, repoRoot, branch string, force b
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrGitBranchDelete, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%w: %w: %s", ErrGitBranchDelete, err, strings.TrimSpace(string(out)))
 	}
 
 	return nil
@@ -216,7 +221,7 @@ func (g *Git) ChangedFiles(ctx context.Context, cwd string) ([]string, error) {
 
 		out, err = cmd.Output()
 		if err != nil {
-			return nil, fmt.Errorf("getting diff: %w", err)
+			return nil, fmt.Errorf("%w: %w", ErrGitDiff, err)
 		}
 	}
 
@@ -231,7 +236,7 @@ func (g *Git) ChangedFiles(ctx context.Context, cwd string) ([]string, error) {
 
 	out, err = cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("getting staged diff: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrGitDiff, err)
 	}
 
 	for line := range strings.SplitSeq(string(out), "\n") {
@@ -245,7 +250,7 @@ func (g *Git) ChangedFiles(ctx context.Context, cwd string) ([]string, error) {
 
 	out, err = cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("listing untracked files: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrGitDiff, err)
 	}
 
 	for line := range strings.SplitSeq(string(out), "\n") {
@@ -274,7 +279,7 @@ func (g *Git) BranchExists(ctx context.Context, dir, branch string) (bool, error
 			return false, nil
 		}
 
-		return false, fmt.Errorf("checking branch existence: %w", err)
+		return false, fmt.Errorf("%w: %w", ErrGitBranchCheck, err)
 	}
 
 	return true, nil
@@ -287,7 +292,7 @@ func (g *Git) FindWorktreeForBranch(ctx context.Context, dir, branch string) (st
 
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("listing worktrees: %w", err)
+		return "", fmt.Errorf("%w: %w", ErrGitWorktreeList, err)
 	}
 
 	// Parse porcelain output: blocks separated by blank lines
@@ -316,7 +321,7 @@ func (g *Git) Rebase(ctx context.Context, dir, target string) error {
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrGitRebase, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%w: %w: %s", ErrGitRebase, err, strings.TrimSpace(string(out)))
 	}
 
 	return nil
@@ -328,7 +333,7 @@ func (g *Git) RebaseAbort(ctx context.Context, dir string) error {
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrGitRebaseAbort, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%w: %w: %s", ErrGitRebaseAbort, err, strings.TrimSpace(string(out)))
 	}
 
 	return nil
@@ -340,7 +345,7 @@ func (g *Git) ConflictingFiles(ctx context.Context, dir string) ([]string, error
 
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("listing conflicting files: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrGitConflictCheck, err)
 	}
 
 	var files []string
@@ -366,7 +371,7 @@ func (g *Git) Merge(ctx context.Context, dir, branch string, ffOnly bool) error 
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrGitMerge, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%w: %w: %s", ErrGitMerge, err, strings.TrimSpace(string(out)))
 	}
 
 	return nil
@@ -382,7 +387,7 @@ func (g *Git) PushLocal(ctx context.Context, dir, sourceBranch, targetBranch str
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrGitMerge, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%w: %w: %s", ErrGitPushLocal, err, strings.TrimSpace(string(out)))
 	}
 
 	return nil
@@ -394,14 +399,14 @@ func (g *Git) CommitsBetween(ctx context.Context, dir, target, branch string) (i
 
 	out, err := cmd.Output()
 	if err != nil {
-		return 0, fmt.Errorf("counting commits: %w", err)
+		return 0, fmt.Errorf("%w: %w", ErrGitCommitCount, err)
 	}
 
 	var count int
 
 	_, err = fmt.Sscanf(strings.TrimSpace(string(out)), "%d", &count)
 	if err != nil {
-		return 0, fmt.Errorf("parsing commit count: %w", err)
+		return 0, fmt.Errorf("%w: %w", ErrGitCommitCount, err)
 	}
 
 	return count, nil
@@ -411,6 +416,7 @@ func (g *Git) CommitsBetween(ctx context.Context, dir, target, branch string) (i
 func (g *Git) newCmdContext(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Env = g.env
+	cmd.Err = nil // Clear exec.ErrDot - use git from PATH, not ./git in current dir
 
 	return cmd
 }

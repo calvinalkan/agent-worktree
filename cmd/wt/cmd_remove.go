@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -76,7 +75,7 @@ func execRemove(
 	// 1. Get main repo root (works from inside worktrees too)
 	mainRepoRoot, err := git.MainRepoRoot(ctx, cfg.EffectiveCwd)
 	if err != nil {
-		return ErrNotGitRepository
+		return err
 	}
 
 	// 2. Find worktree by name
@@ -85,7 +84,7 @@ func execRemove(
 
 	info, err := readWorktreeInfo(fsys, wtPath)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, ErrNotWtWorktree) {
 			return fmt.Errorf("%w: %s", errWorktreeNotFound, name)
 		}
 
