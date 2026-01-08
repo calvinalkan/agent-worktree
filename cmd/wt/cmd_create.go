@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +25,7 @@ func CreateCmd(cfg Config, fsys fs.FS, git *Git, env map[string]string) *Command
 	flags.StringP("name", "n", "", "Worktree and branch name (default: auto-generated)")
 	flags.StringP("from-branch", "b", "", "Branch to base off (default: current branch)")
 	flags.Bool("with-changes", false, "Copy staged, unstaged, and untracked files to new worktree")
+	flags.Bool("json", false, "Output as JSON")
 
 	return &Command{
 		Flags: flags,
@@ -41,8 +43,9 @@ If .wt/hooks/post-create exists and is executable, it runs after creation.`,
 			customName, _ := flags.GetString("name")
 			fromBranch, _ := flags.GetString("from-branch")
 			withChanges, _ := flags.GetBool("with-changes")
+			jsonOutput, _ := flags.GetBool("json")
 
-			return execCreate(ctx, stdout, stderr, cfg, fsys, git, env, customName, fromBranch, withChanges)
+			return execCreate(ctx, stdout, stderr, cfg, fsys, git, env, customName, fromBranch, withChanges, jsonOutput)
 		},
 	}
 }
@@ -112,7 +115,7 @@ func execCreate(
 	git *Git,
 	env map[string]string,
 	customName, fromBranch string,
-	withChanges bool,
+	withChanges, jsonOutput bool,
 ) error {
 	// 1. Verify git repository and get main repo root
 	// MainRepoRoot returns the main repo's root even when inside a worktree,
@@ -268,6 +271,10 @@ func execCreate(
 	}
 
 	// 14. Print success output
+	if jsonOutput {
+		return outputCreateJSON(stdout, name, agentID, nextID, wtPath, baseBranch)
+	}
+
 	fprintln(stdout, "Created worktree:")
 	fprintf(stdout, "  name:        %s\n", name)
 	fprintf(stdout, "  agent_id:    %s\n", agentID)
@@ -311,6 +318,37 @@ func copyUncommittedChanges(ctx context.Context, fsys fs.FS, git *Git, srcDir, d
 		if writeErr != nil {
 			return fmt.Errorf("writing %s: %w", relPath, writeErr)
 		}
+	}
+
+	return nil
+}
+
+// jsonCreateOutput is the JSON output format for the create command.
+type jsonCreateOutput struct {
+	Name    string `json:"name"`
+	AgentID string `json:"agent_id"`
+	ID      int    `json:"id"`
+	Path    string `json:"path"`
+	Branch  string `json:"branch"`
+	From    string `json:"from"`
+}
+
+func outputCreateJSON(output io.Writer, name, agentID string, id int, path, from string) error {
+	result := jsonCreateOutput{
+		Name:    name,
+		AgentID: agentID,
+		ID:      id,
+		Path:    path,
+		Branch:  name,
+		From:    from,
+	}
+
+	enc := json.NewEncoder(output)
+	enc.SetIndent("", "  ")
+
+	encodeErr := enc.Encode(result)
+	if encodeErr != nil {
+		return fmt.Errorf("encoding JSON: %w", encodeErr)
 	}
 
 	return nil

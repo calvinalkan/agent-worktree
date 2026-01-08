@@ -1716,6 +1716,249 @@ func Test_Create_Warns_When_Exclude_File_Not_Readable(t *testing.T) {
 	AssertContains(t, stdout, "Created worktree:")
 }
 
+// Tests for --json flag
+
+func Test_Create_JSON_Flag_Outputs_Valid_JSON(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "--json", "--name", "json-out")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// Parse the JSON output
+	var result map[string]any
+
+	err := json.Unmarshal([]byte(stdout), &result)
+	if err != nil {
+		t.Fatalf("stdout is not valid JSON: %v\nstdout: %s", err, stdout)
+	}
+
+	// Verify required fields exist
+	requiredFields := []string{"name", "agent_id", "id", "path", "branch", "from"}
+	for _, field := range requiredFields {
+		if _, ok := result[field]; !ok {
+			t.Errorf("missing required field: %s", field)
+		}
+	}
+}
+
+func Test_Create_JSON_Output_Contains_Correct_Values(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "--json", "--name", "json-values")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	var result map[string]any
+
+	err := json.Unmarshal([]byte(stdout), &result)
+	if err != nil {
+		t.Fatalf("stdout is not valid JSON: %v", err)
+	}
+
+	// Verify specific values
+	if result["name"] != "json-values" {
+		t.Errorf("expected name 'json-values', got %v", result["name"])
+	}
+
+	if result["branch"] != "json-values" {
+		t.Errorf("expected branch 'json-values', got %v", result["branch"])
+	}
+
+	if result["from"] != testBaseBranchMain {
+		t.Errorf("expected from '%s', got %v", testBaseBranchMain, result["from"])
+	}
+
+	// id should be 1 for first worktree
+	if id, ok := result["id"].(float64); !ok || id != 1 {
+		t.Errorf("expected id 1, got %v", result["id"])
+	}
+
+	// agent_id should be a string containing hyphen (adjective-animal)
+	agentID, ok := result["agent_id"].(string)
+	if !ok || !strings.Contains(agentID, "-") {
+		t.Errorf("expected agent_id to be adjective-animal format, got %v", result["agent_id"])
+	}
+
+	// path should be absolute
+	path, ok := result["path"].(string)
+	if !ok || !filepath.IsAbs(path) {
+		t.Errorf("expected path to be absolute, got %v", result["path"])
+	}
+}
+
+func Test_Create_JSON_Output_Has_Indentation(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "--json", "--name", "json-indent")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// JSON should have indentation (contains newlines and spaces)
+	if !strings.Contains(stdout, "\n  ") {
+		t.Errorf("JSON output should be indented, got:\n%s", stdout)
+	}
+}
+
+func Test_Create_JSON_Flag_Does_Not_Include_Created_Worktree_Header(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "--json", "--name", "json-no-header")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// Should NOT contain the human-readable header
+	if strings.Contains(stdout, "Created worktree:") {
+		t.Errorf("JSON output should not contain human-readable header")
+	}
+}
+
+func Test_Create_JSON_Flag_Warnings_Go_To_Stderr(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	// Make .git/info/exclude non-writable to trigger a warning
+	excludePath := filepath.Join(cli.Dir, ".git", "info", "exclude")
+
+	err := os.Chmod(excludePath, 0o444)
+	if err != nil {
+		t.Fatalf("failed to make exclude read-only: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.Chmod(excludePath, 0o644)
+	})
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "--json", "--name", "json-warnings")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// Warning should be in stderr, not stdout
+	AssertContains(t, stderr, "warning:")
+
+	// stdout should still be valid JSON (warning not mixed in)
+	var result map[string]any
+
+	err = json.Unmarshal([]byte(stdout), &result)
+	if err != nil {
+		t.Fatalf("stdout should be valid JSON even with warnings: %v\nstdout: %s", err, stdout)
+	}
+}
+
+func Test_Create_JSON_Flag_With_Custom_Name(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "--json", "--name", "custom-json-name")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	var result map[string]any
+
+	err := json.Unmarshal([]byte(stdout), &result)
+	if err != nil {
+		t.Fatalf("stdout is not valid JSON: %v", err)
+	}
+
+	// name should be the custom name
+	if result["name"] != "custom-json-name" {
+		t.Errorf("expected name 'custom-json-name', got %v", result["name"])
+	}
+
+	// agent_id should be different (auto-generated)
+	agentID, ok := result["agent_id"].(string)
+	if !ok {
+		t.Errorf("agent_id should be a string, got %v", result["agent_id"])
+	}
+
+	if agentID == "custom-json-name" {
+		t.Errorf("agent_id should be auto-generated, not match custom name")
+	}
+}
+
+func Test_Create_JSON_Flag_With_From_Branch(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	createBranch(t, cli.Dir, testBranchDevelop)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "--json", "--from-branch", testBranchDevelop, "--name", "json-from")
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	var result map[string]any
+
+	err := json.Unmarshal([]byte(stdout), &result)
+	if err != nil {
+		t.Fatalf("stdout is not valid JSON: %v", err)
+	}
+
+	if result["from"] != testBranchDevelop {
+		t.Errorf("expected from '%s', got %v", testBranchDevelop, result["from"])
+	}
+}
+
+func Test_Create_Help_Shows_JSON_Flag(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+
+	stdout, _, code := cli.Run("create", "--help")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0 for help, got %d", code)
+	}
+
+	AssertContains(t, stdout, "--json")
+	AssertContains(t, stdout, "Output as JSON")
+}
+
 // Helper function to create a branch in a git repo.
 func createBranch(t *testing.T, repoDir, branchName string) {
 	t.Helper()
