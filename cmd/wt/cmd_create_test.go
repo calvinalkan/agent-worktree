@@ -1543,6 +1543,179 @@ echo "hook finished for $WT_NAME at $(date +%s)" >> "$WT_REPO_ROOT/hook-log.txt"
 	}
 }
 
+func Test_Create_Adds_Worktree_Exclusion_To_Git_Exclude(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--name", "exclude-test")
+
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Verify .wt/worktree.json is in .git/info/exclude
+	excludeContent := cli.ReadFile(".git/info/exclude")
+	AssertContains(t, excludeContent, ".wt/worktree.json")
+}
+
+func Test_Create_Does_Not_Duplicate_Worktree_Exclusion(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create first worktree
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--name", "first-excl")
+	if code != 0 {
+		t.Fatalf("first create failed: %s", stderr)
+	}
+
+	// Create second worktree
+	_, stderr, code = cli.Run("--config", "config.json", "create", "--name", "second-excl")
+	if code != 0 {
+		t.Fatalf("second create failed: %s", stderr)
+	}
+
+	// Read exclude file and count occurrences
+	excludeContent := cli.ReadFile(".git/info/exclude")
+	count := strings.Count(excludeContent, ".wt/worktree.json")
+
+	if count != 1 {
+		t.Errorf("expected exactly 1 occurrence of .wt/worktree.json in exclude, got %d\ncontent:\n%s", count, excludeContent)
+	}
+}
+
+func Test_Create_Preserves_Existing_Exclude_Content(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	// Write some existing content to .git/info/exclude
+	existingContent := "# Custom exclusions\n*.log\ntmp/\n"
+	cli.WriteFile(".git/info/exclude", existingContent)
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--name", "preserve-test")
+
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Verify existing content is preserved
+	excludeContent := cli.ReadFile(".git/info/exclude")
+	AssertContains(t, excludeContent, "# Custom exclusions")
+	AssertContains(t, excludeContent, "*.log")
+	AssertContains(t, excludeContent, "tmp/")
+	AssertContains(t, excludeContent, ".wt/worktree.json")
+}
+
+func Test_Create_Handles_Exclude_Already_Present(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	// Pre-add the exclusion manually
+	cli.WriteFile(".git/info/exclude", "# Already has it\n.wt/worktree.json\n")
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	_, stderr, code := cli.Run("--config", "config.json", "create", "--name", "already-present")
+
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Should still have exactly one occurrence
+	excludeContent := cli.ReadFile(".git/info/exclude")
+	count := strings.Count(excludeContent, ".wt/worktree.json")
+
+	if count != 1 {
+		t.Errorf("expected exactly 1 occurrence, got %d\ncontent:\n%s", count, excludeContent)
+	}
+}
+
+func Test_Create_Warns_When_Exclude_File_Not_Writable(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	// Make .git/info/exclude non-writable
+	excludePath := filepath.Join(cli.Dir, ".git", "info", "exclude")
+
+	err := os.Chmod(excludePath, 0o444)
+	if err != nil {
+		t.Fatalf("failed to make exclude read-only: %v", err)
+	}
+
+	// Restore permissions after test
+	t.Cleanup(func() {
+		_ = os.Chmod(excludePath, 0o644)
+	})
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "--name", "warn-test")
+
+	// Should still succeed (warning is non-blocking)
+	if code != 0 {
+		t.Fatalf("create should succeed despite exclude warning: %s", stderr)
+	}
+
+	// Should print warning to stderr
+	AssertContains(t, stderr, "warning:")
+	AssertContains(t, stderr, ".wt/worktree.json")
+	AssertContains(t, stderr, "manually")
+
+	// Worktree should still be created
+	AssertContains(t, stdout, "Created worktree:")
+}
+
+func Test_Create_Warns_When_Exclude_File_Not_Readable(t *testing.T) {
+	t.Parallel()
+
+	cli := NewCLITester(t)
+	initRealGitRepo(t, cli.Dir)
+
+	// Make .git/info/exclude non-readable
+	excludePath := filepath.Join(cli.Dir, ".git", "info", "exclude")
+
+	err := os.Chmod(excludePath, 0o000)
+	if err != nil {
+		t.Fatalf("failed to make exclude unreadable: %v", err)
+	}
+
+	// Restore permissions after test
+	t.Cleanup(func() {
+		_ = os.Chmod(excludePath, 0o644)
+	})
+
+	cli.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	stdout, stderr, code := cli.Run("--config", "config.json", "create", "--name", "unreadable-test")
+
+	// Should still succeed (warning is non-blocking)
+	if code != 0 {
+		t.Fatalf("create should succeed despite exclude warning: %s", stderr)
+	}
+
+	// Should print warning to stderr
+	AssertContains(t, stderr, "warning:")
+	AssertContains(t, stderr, "manually")
+
+	// Worktree should still be created
+	AssertContains(t, stdout, "Created worktree:")
+}
+
 // Helper function to create a branch in a git repo.
 func createBranch(t *testing.T, repoDir, branchName string) {
 	t.Helper()

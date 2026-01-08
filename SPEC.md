@@ -8,6 +8,12 @@
 
 ---
 
+### Worktree Context
+
+All commands can be run from within any worktree. For example, running `wt list` from inside worktree "swift-fox" shows all worktrees for the repository, and `wt create` creates a new sibling worktree (not a nested one).
+
+---
+
 ### Command Structure
 
 ```

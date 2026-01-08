@@ -7,6 +7,7 @@ import (
 	"io"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/calvinalkan/agent-task/pkg/fs"
@@ -61,6 +62,48 @@ func worktreeLockPath(gitCommonDir string) string {
 	return filepath.Join(gitCommonDir, "wt.lock")
 }
 
+// worktreeExcludePattern is the pattern added to .git/info/exclude
+// to prevent .wt/worktree.json from being tracked.
+const worktreeExcludePattern = ".wt/worktree.json"
+
+// ensureWorktreeExcluded adds .wt/worktree.json to .git/info/exclude if not present.
+// Returns a warning message if the operation fails, or empty string on success.
+func ensureWorktreeExcluded(fsys fs.FS, gitCommonDir string) string {
+	excludePath := filepath.Join(gitCommonDir, "info", "exclude")
+
+	// Read existing content
+	content, err := fsys.ReadFile(excludePath)
+	if err != nil {
+		return fmt.Sprintf("warning: could not read %s: %v\nPlease add '%s' to your .gitignore manually.",
+			excludePath, err, worktreeExcludePattern)
+	}
+
+	// Check if pattern already exists
+	lines := strings.SplitSeq(string(content), "\n")
+	for line := range lines {
+		if strings.TrimSpace(line) == worktreeExcludePattern {
+			return "" // Already present
+		}
+	}
+
+	// Append pattern
+	newContent := string(content)
+	if newContent != "" && !strings.HasSuffix(newContent, "\n") {
+		newContent += "\n"
+	}
+
+	newContent += worktreeExcludePattern + "\n"
+
+	// Write back
+	err = fsys.WriteFile(excludePath, []byte(newContent), 0o644)
+	if err != nil {
+		return fmt.Sprintf("warning: could not update %s: %v\nPlease add '%s' to your .gitignore manually.",
+			excludePath, err, worktreeExcludePattern)
+	}
+
+	return ""
+}
+
 func execCreate(
 	ctx context.Context,
 	stdout, stderr io.Writer,
@@ -83,6 +126,11 @@ func execCreate(
 	gitCommonDir, err := git.GitCommonDir(ctx, cfg.EffectiveCwd)
 	if err != nil {
 		return fmt.Errorf("cannot determine git directory: %w", err)
+	}
+
+	// 2a. Ensure .wt/worktree.json is excluded from git tracking
+	if warning := ensureWorktreeExcluded(fsys, gitCommonDir); warning != "" {
+		fprintln(stderr, warning)
 	}
 
 	// 3. Resolve base branch
