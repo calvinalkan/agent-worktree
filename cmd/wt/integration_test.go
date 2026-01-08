@@ -111,7 +111,8 @@ func Test_FullWorkflow_Create_List_Info_Delete(t *testing.T) {
 		t.Fatalf("delete feature-a failed: %s", stderr)
 	}
 
-	AssertContains(t, deleteOut, "Deleted worktree and branch: feature-a")
+	AssertContains(t, deleteOut, "Deleted worktree directory:")
+	AssertContains(t, deleteOut, "Deleted branch: feature-a")
 
 	// Step 7: List should show only second worktree
 	listOut, stderr, code = c.Run("--config", "config.json", "list")

@@ -85,7 +85,8 @@ func Test_Delete_Deletes_Worktree_Successfully(t *testing.T) {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
 	}
 
-	AssertContains(t, stdout, "Deleted worktree and branch: test-wt")
+	AssertContains(t, stdout, "Deleted worktree directory:")
+	AssertContains(t, stdout, "Deleted branch: test-wt")
 
 	// Verify worktree is gone
 	if c.FileExists("worktrees/test-wt") {
@@ -159,7 +160,8 @@ func Test_Delete_Force_Deletes_Dirty_Worktree(t *testing.T) {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
 	}
 
-	AssertContains(t, stdout, "Deleted worktree and branch: dirty-wt")
+	AssertContains(t, stdout, "Deleted worktree directory:")
+	AssertContains(t, stdout, "Deleted branch: dirty-wt")
 
 	// Verify worktree is gone
 	if c.FileExists("worktrees/dirty-wt") {
@@ -189,9 +191,9 @@ func Test_Delete_Without_WithBranch_Keeps_Branch(t *testing.T) {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
 	}
 
-	// Should only say "Deleted worktree:", not "Deleted worktree and branch:"
-	AssertContains(t, stdout, "Deleted worktree: keep-branch-wt")
-	AssertNotContains(t, stdout, "and branch")
+	// Should show worktree deletion but not branch deletion
+	AssertContains(t, stdout, "Deleted worktree directory:")
+	AssertNotContains(t, stdout, "Deleted branch:")
 
 	// Verify worktree is gone
 	if c.FileExists("worktrees/keep-branch-wt") {
@@ -224,7 +226,8 @@ func Test_Delete_WithBranch_Deletes_Branch(t *testing.T) {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
 	}
 
-	AssertContains(t, stdout, "Deleted worktree and branch: delete-branch-wt")
+	AssertContains(t, stdout, "Deleted worktree directory:")
+	AssertContains(t, stdout, "Deleted branch: delete-branch-wt")
 }
 
 func Test_Delete_Short_Flag_F_Works_Same_As_Force(t *testing.T) {
@@ -257,7 +260,8 @@ func Test_Delete_Short_Flag_F_Works_Same_As_Force(t *testing.T) {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
 	}
 
-	AssertContains(t, stdout, "Deleted worktree and branch: short-f-wt")
+	AssertContains(t, stdout, "Deleted worktree directory:")
+	AssertContains(t, stdout, "Deleted branch: short-f-wt")
 
 	// Verify worktree is gone
 	if c.FileExists("worktrees/short-f-wt") {
@@ -286,8 +290,9 @@ func Test_Delete_Short_Flag_B_Works_Same_As_WithBranch(t *testing.T) {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
 	}
 
-	// Should say "and branch" because -b was used
-	AssertContains(t, stdout, "Deleted worktree and branch: short-b-wt")
+	// Should show both worktree and branch deletion because -b was used
+	AssertContains(t, stdout, "Deleted worktree directory:")
+	AssertContains(t, stdout, "Deleted branch: short-b-wt")
 
 	// Verify worktree is gone
 	if c.FileExists("worktrees/short-b-wt") {
@@ -324,7 +329,8 @@ echo "WT_PATH=$WT_PATH" >> "` + hookMarker + `"
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
 	}
 
-	AssertContains(t, stdout, "Deleted worktree and branch: hook-test-wt")
+	AssertContains(t, stdout, "Deleted worktree directory:")
+	AssertContains(t, stdout, "Deleted branch: hook-test-wt")
 
 	// Verify hook ran
 	if !c.FileExists("hook-ran.txt") {
@@ -416,33 +422,25 @@ func Test_Delete_Help_Shows_Detailed_Description(t *testing.T) {
 func Test_Delete_Interactive_Prompt_Yes_Deletes_Branch(t *testing.T) {
 	t.Parallel()
 
-	// This test verifies the promptYesNo function works correctly
+	// This test verifies the readYesNo function works correctly
 	// Since IsTerminal() returns false in tests, we can't test the full interactive flow
-	// But we can test the promptYesNo function directly
-
-	var stdout strings.Builder
+	// But we can test the readYesNo function directly
 
 	stdin := strings.NewReader("y\n")
 
-	result := promptYesNo(stdin, &stdout, "Delete branch? (y/N) ")
+	result := readYesNo(stdin)
 
 	if !result {
 		t.Error("expected true for 'y' response")
-	}
-
-	if !strings.Contains(stdout.String(), "Delete branch? (y/N) ") {
-		t.Error("expected prompt to be written to stdout")
 	}
 }
 
 func Test_Delete_Interactive_Prompt_No_Keeps_Branch(t *testing.T) {
 	t.Parallel()
 
-	var stdout strings.Builder
-
 	stdin := strings.NewReader("n\n")
 
-	result := promptYesNo(stdin, &stdout, "Delete branch? (y/N) ")
+	result := readYesNo(stdin)
 
 	if result {
 		t.Error("expected false for 'n' response")
@@ -452,11 +450,9 @@ func Test_Delete_Interactive_Prompt_No_Keeps_Branch(t *testing.T) {
 func Test_Delete_Interactive_Prompt_Empty_Keeps_Branch(t *testing.T) {
 	t.Parallel()
 
-	var stdout strings.Builder
-
 	stdin := strings.NewReader("\n")
 
-	result := promptYesNo(stdin, &stdout, "Delete branch? (y/N) ")
+	result := readYesNo(stdin)
 
 	if result {
 		t.Error("expected false for empty response")
@@ -466,11 +462,9 @@ func Test_Delete_Interactive_Prompt_Empty_Keeps_Branch(t *testing.T) {
 func Test_Delete_Interactive_Prompt_Yes_Uppercase(t *testing.T) {
 	t.Parallel()
 
-	var stdout strings.Builder
-
 	stdin := strings.NewReader("Y\n")
 
-	result := promptYesNo(stdin, &stdout, "Delete branch? (y/N) ")
+	result := readYesNo(stdin)
 
 	if !result {
 		t.Error("expected true for 'Y' response")
@@ -526,7 +520,8 @@ func Test_Delete_Works_With_Manual_Worktree_Directory(t *testing.T) {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
 	}
 
-	AssertContains(t, stdout, "Deleted worktree and branch: manual-wt")
+	AssertContains(t, stdout, "Deleted worktree directory:")
+	AssertContains(t, stdout, "Deleted branch: manual-wt")
 
 	// Verify worktree is gone
 	if c.FileExists("worktrees/manual-wt") {

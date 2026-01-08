@@ -313,25 +313,31 @@ Delete a worktree.
 4. If `.wt/hooks/pre-delete` exists and is executable, execute it
 5. If hook exits non-zero: abort and exit with error
 6. Run `git worktree remove <path>`
-7. Determine whether to delete branch:
+7. Output confirmation: "Deleted worktree directory: <path>"
+8. Determine whether to delete branch:
    - If `--with-branch` provided: delete branch
-   - If interactive terminal (tty): prompt user
+   - If interactive terminal (tty): explain branch is safe, prompt user
    - If non-interactive: keep branch
-8. Run `git worktree prune`
+9. If branch deleted, output: "Deleted branch: <name>"
+10. Run `git worktree prune`
 
 **Interactive prompt** (tty only):
 ```
-Delete branch 'swift-fox'? (y/N)
+Deleted worktree directory: /home/user/worktrees/my-repo/swift-fox
+
+Branch 'swift-fox' still contains all your commits.
+Also delete the branch? (y/N)
 ```
 
-**Output** (success):
+**Output** (success, without branch deletion):
 ```
-Deleted worktree: swift-fox
+Deleted worktree directory: /home/user/worktrees/my-repo/swift-fox
 ```
 
-Or with branch:
+**Output** (success, with branch deletion):
 ```
-Deleted worktree and branch: swift-fox
+Deleted worktree directory: /home/user/worktrees/my-repo/swift-fox
+Deleted branch: swift-fox
 ```
 
 **Errors**:
@@ -467,14 +473,18 @@ $ wt info --field id
 **Delete worktree**:
 ```bash
 $ wt delete swift-fox
-Delete branch 'swift-fox'? (y/N) y
-Deleted worktree and branch: swift-fox
+Deleted worktree directory: /home/user/worktrees/my-repo/swift-fox
+
+Branch 'swift-fox' still contains all your commits.
+Also delete the branch? (y/N) y
+Deleted branch: swift-fox
 ```
 
 **Delete worktree non-interactively**:
 ```bash
 $ wt delete swift-fox --with-branch
-Deleted worktree and branch: swift-fox
+Deleted worktree directory: /home/user/worktrees/my-repo/swift-fox
+Deleted branch: swift-fox
 ```
 
 **Delete worktree with uncommitted changes**:
@@ -483,7 +493,8 @@ $ wt delete feature-auth
 Error: worktree has uncommitted changes (use --force to override)
 
 $ wt delete feature-auth --force --with-branch
-Deleted worktree and branch: feature-auth
+Deleted worktree directory: /home/user/worktrees/my-repo/feature-auth
+Deleted branch: feature-auth
 ```
 
 **Use custom config**:

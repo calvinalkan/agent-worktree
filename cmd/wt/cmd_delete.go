@@ -117,16 +117,23 @@ func execDelete(
 		return fmt.Errorf("%w: %w", errRemovingWorktreeFailed, err)
 	}
 
-	// 6. Determine branch deletion
+	// 6. Show confirmation that worktree was deleted
+	fprintln(stdout, "Deleted worktree directory:", wtPath)
+
+	// 7. Determine branch deletion
 	deleteBranch := withBranch
 
 	if !withBranch && stdin != nil && IsTerminal() {
-		// Interactive prompt
-		deleteBranch = promptYesNo(stdin, stdout, fmt.Sprintf("Delete branch '%s'? (y/N) ", name))
+		// Interactive prompt - explain that branch is safe and ask about deletion
+		fprintln(stdout)
+		fprintf(stdout, "Branch '%s' still contains all your commits.\n", name)
+		fprintf(stdout, "Also delete the branch? (y/N) ")
+
+		deleteBranch = readYesNo(stdin)
 	}
 	// Non-interactive without --with-branch: keep branch (deleteBranch stays false)
 
-	// 7. Delete branch if requested
+	// 8. Delete branch if requested
 	var branchErr error
 
 	branchDeleted := false
@@ -138,25 +145,21 @@ func execDelete(
 		}
 	}
 
-	// 8. Prune worktree metadata (always run, independent of branch deletion)
+	// 9. Prune worktree metadata (always run, independent of branch deletion)
 	pruneErr := git.WorktreePrune(ctx, mainRepoRoot)
 
-	// 9. Output what actually happened
+	// 10. Output what actually happened with branch
 	if branchDeleted {
-		fprintln(stdout, "Deleted worktree and branch:", name)
-	} else {
-		fprintln(stdout, "Deleted worktree:", name)
+		fprintln(stdout, "Deleted branch:", name)
 	}
 
-	// 10. Return combined errors if any
+	// 11. Return combined errors if any
 	return errors.Join(branchErr, pruneErr)
 }
 
-// promptYesNo prompts the user for yes/no confirmation.
+// readYesNo reads a yes/no response from stdin.
 // Returns true for 'y' or 'Y', false otherwise.
-func promptYesNo(stdin io.Reader, stdout io.Writer, prompt string) bool {
-	fprintf(stdout, "%s", prompt)
-
+func readYesNo(stdin io.Reader) bool {
 	reader := bufio.NewReader(stdin)
 
 	response, err := reader.ReadString('\n')

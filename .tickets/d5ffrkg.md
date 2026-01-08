@@ -1,0 +1,14 @@
+---
+schema_version: 1
+id: d5ffrkg
+status: open
+blocked-by: []
+created: 2026-01-08T00:37:34Z
+type: chore
+priority: 3
+---
+# Rename 'list' command to 'ls'
+
+Shorter and more familiar alias matching common CLI conventions (git, unix).
+
+Change the command from 'wt list' to 'wt ls'.
