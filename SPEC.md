@@ -1,10 +1,39 @@
 # wt - Git Worktree Manager
 
+A foundation for agentic coding workflows.
+
+## Why wt?
+
+Any multi-agent coding setup needs isolated workspaces. When you spin up parallel
+agents—or even just concurrent dev tasks—each one needs:
+
+- **Its own worktree** — complete file isolation, no conflicts, independent git state
+- **A stable identity** — the `agent_id` (e.g. `swift-fox`) for logs, prompts, routing,
+  inter-agent communication, reconciliation with external tools
+- **A numeric seed** — the `id` for deterministic resource allocation: unique ports,
+  database prefixes, container names, temp directories. Run full test suites in parallel
+  without collisions—agent A's tests won't clobber agent B's database. ID assignment
+  is atomic; no duplicates within a repo, ever.
+- **Automated environment setup** — hooks handle dependency installation, Docker containers,
+  `.env` configuration, database migrations, whatever your stack needs
+
+`wt` provides this foundation. It's not an orchestrator or agent framework—it's the
+solid, reliable piece underneath that handles worktree lifecycle and identity. Compose
+it with your task runner, agent harness, or orchestration layer.
+
+Built for humans and agents alike. Clean stdout/stderr separation: stdout is always
+machine-parseable (paths, JSON), stderr carries context and errors. Agents can invoke
+`wt` directly to self-manage their worktrees.
+
+Built in Go. No dependencies. Thoroughly tested.
+
+---
+
 ## Specification
 
 ### Overview
 
-`wt` is a CLI tool for managing git worktrees with automatic naming, unique identifiers, and lifecycle hooks.
+`wt` is a CLI for managing git worktrees with auto-generated identifiers and lifecycle hooks.
 
 ---
 

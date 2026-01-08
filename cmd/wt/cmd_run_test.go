@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -60,8 +61,8 @@ func Test_Run_Global_Help_Shows_Description_And_Footer(t *testing.T) {
 	}
 
 	// Verify description is present
-	AssertContains(t, stdout, "Manages isolated git worktrees with auto-generated names, lifecycle hooks,")
-	AssertContains(t, stdout, "and metadata tracking. Each worktree gets its own branch and directory.")
+	AssertContains(t, stdout, "A foundation for multi-agent development. Each worktree gets:")
+	AssertContains(t, stdout, "agent_id")
 
 	// Verify footer hint is present
 	AssertContains(t, stdout, "Run 'wt <command> --help' for more information on a command.")
@@ -136,6 +137,24 @@ func Test_Run_Shows_Blank_Line_Between_Error_And_Usage(t *testing.T) {
 
 	// Error message should be followed by blank line before usage help
 	AssertContains(t, stderr, "error: unknown command: unknown\n\nwt - git worktree manager")
+}
+
+func Test_Run_Error_Output_Contains_Error_Prefix(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	_, stderr, code := c.Run("unknown")
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+
+	// Error output should contain "error:" (may or may not have ANSI codes depending on TTY)
+	// In non-TTY mode (typical for tests), should be plain
+	// In TTY mode, will have ANSI codes
+	if !strings.Contains(stderr, "error:") {
+		t.Errorf("stderr should contain 'error:', got: %s", stderr)
+	}
 }
 
 func Test_Create_Shows_Help_When_Help_Flag(t *testing.T) {

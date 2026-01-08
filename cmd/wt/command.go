@@ -78,7 +78,7 @@ func (c *Command) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Wr
 			return 0
 		}
 
-		fprintln(stderr, "error:", err)
+		fprintError(stderr, err)
 		fprintln(stderr)
 		c.PrintHelp(stderr)
 
@@ -95,7 +95,7 @@ func (c *Command) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Wr
 
 	err = c.Exec(ctx, stdin, stdout, stderr, c.Flags.Args())
 	if err != nil {
-		fprintln(stderr, "error:", err)
+		fprintError(stderr, err)
 
 		return 1
 	}

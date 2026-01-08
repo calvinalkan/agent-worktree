@@ -251,20 +251,46 @@ func (c *CLI) FileExistsAt(baseDir, relPath string) bool {
 	return err == nil
 }
 
+// stripANSI removes ANSI escape codes from a string.
+// Used to normalize output for comparison regardless of TTY state.
+func stripANSI(s string) string {
+	// Simple approach: remove sequences starting with ESC[ and ending with m
+	result := s
+	for {
+		start := strings.Index(result, "\033[")
+		if start == -1 {
+			break
+		}
+
+		end := strings.Index(result[start:], "m")
+		if end == -1 {
+			break
+		}
+
+		result = result[:start] + result[start+end+1:]
+	}
+
+	return result
+}
+
 // AssertContains fails the test if content doesn't contain substr.
+// Strips ANSI codes from content before comparison to handle TTY/non-TTY differences.
 func AssertContains(t *testing.T, content, substr string) {
 	t.Helper()
 
-	if !strings.Contains(content, substr) {
+	cleaned := stripANSI(content)
+	if !strings.Contains(cleaned, substr) {
 		t.Errorf("content should contain %q\ncontent:\n%s", substr, content)
 	}
 }
 
 // AssertNotContains fails the test if content contains substr.
+// Strips ANSI codes from content before comparison to handle TTY/non-TTY differences.
 func AssertNotContains(t *testing.T, content, substr string) {
 	t.Helper()
 
-	if strings.Contains(content, substr) {
+	cleaned := stripANSI(content)
+	if strings.Contains(cleaned, substr) {
 		t.Errorf("content should NOT contain %q\ncontent:\n%s", substr, content)
 	}
 }

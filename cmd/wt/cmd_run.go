@@ -41,7 +41,7 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 
 	err := globalFlags.Parse(args[1:])
 	if err != nil {
-		fprintln(stderr, "error:", err)
+		fprintError(stderr, err)
 		fprintln(stderr)
 		printGlobalOptions(stderr)
 
@@ -81,7 +81,7 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 		Env:             env,
 	})
 	if err != nil {
-		fprintln(stderr, "error:", err)
+		fprintError(stderr, err)
 
 		return 1
 	}
@@ -113,7 +113,7 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 
 	cmd, ok := commandMap[cmdName]
 	if !ok {
-		fprintln(stderr, "error: unknown command:", cmdName)
+		fprintErrorMsg(stderr, "unknown command: %s", cmdName)
 		fprintln(stderr)
 		printUsage(stderr, commands)
 
@@ -166,6 +166,30 @@ func fprintf(output io.Writer, format string, a ...any) {
 	_, _ = fmt.Fprintf(output, format, a...)
 }
 
+// ANSI color codes for terminal output.
+const (
+	colorRed   = "\033[31m"
+	colorReset = "\033[0m"
+)
+
+// fprintError prints an error message with optional red coloring for TTY.
+func fprintError(output io.Writer, err error) {
+	if IsTerminal() {
+		fprintln(output, colorRed+"error:"+colorReset, err)
+	} else {
+		fprintln(output, "error:", err)
+	}
+}
+
+// fprintErrorMsg prints an error message string with optional red coloring for TTY.
+func fprintErrorMsg(output io.Writer, msg string, args ...any) {
+	if IsTerminal() {
+		fprintln(output, colorRed+"error:"+colorReset, fmt.Sprintf(msg, args...))
+	} else {
+		fprintln(output, "error:", fmt.Sprintf(msg, args...))
+	}
+}
+
 const globalOptionsHelp = `  -h, --help             Show help
   -v, --version          Show version and exit
   -C, --cwd <dir>        Run as if started in <dir>
@@ -181,10 +205,14 @@ func printGlobalOptions(output io.Writer) {
 }
 
 func printUsage(output io.Writer, commands []*Command) {
-	fprintln(output, "wt - git worktree manager")
+	fprintln(output, "wt - git worktree manager for agentic coding workflows")
 	fprintln(output)
-	fprintln(output, "Manages isolated git worktrees with auto-generated names, lifecycle hooks,")
-	fprintln(output, "and metadata tracking. Each worktree gets its own branch and directory.")
+	fprintln(output, "A foundation for multi-agent development. Each worktree gets:")
+	fprintln(output, "  • agent_id  — unique name (swift-fox) for routing, logs, communication")
+	fprintln(output, "  • id        — unique number for ports, DB prefixes, container names")
+	fprintln(output, "  • hooks     — automate setup/teardown (deps, Docker, migrations)")
+	fprintln(output)
+	fprintln(output, "Built for humans and agents: stdout is machine-parseable, stderr has context.")
 	fprintln(output)
 	fprintln(output, "Usage: wt [flags] <command> [args]")
 	fprintln(output)
@@ -383,14 +411,20 @@ func IsAbsolutePath(path string) bool {
 	return strings.HasPrefix(path, "/") || strings.HasPrefix(path, "~")
 }
 
-// IsTerminal returns true if stdin is a terminal.
-func IsTerminal() bool {
+// isTerminal is a function variable that returns true if stdin is a terminal.
+// It can be overridden in tests to control TTY behavior.
+var isTerminal = func() bool {
 	stat, err := os.Stdin.Stat()
 	if err != nil {
 		return false
 	}
 
 	return (stat.Mode() & os.ModeCharDevice) != 0
+}
+
+// IsTerminal returns true if stdin is a terminal.
+func IsTerminal() bool {
+	return isTerminal()
 }
 
 // getRepoName extracts the repository name from the root path.
