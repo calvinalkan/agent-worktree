@@ -606,7 +606,7 @@ func Test_Remove_Help_Shows_Alias(t *testing.T) {
 	AssertContains(t, stdout, "Aliases: rm")
 }
 
-func Test_GlobalHelp_Shows_Remove_With_Alias(t *testing.T) {
+func Test_GlobalHelp_Shows_Remove_Command(t *testing.T) {
 	t.Parallel()
 
 	c := NewCLITester(t)
@@ -617,6 +617,6 @@ func Test_GlobalHelp_Shows_Remove_With_Alias(t *testing.T) {
 		t.Errorf("expected exit code 0, got %d", code)
 	}
 
-	// Verify remove command shows alias inline
-	AssertContains(t, stdout, "remove, rm")
+	// Verify remove command is listed (aliases shown only in command help)
+	AssertContains(t, stdout, "remove <name>")
 }

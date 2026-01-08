@@ -60,9 +60,8 @@ func Test_Run_Global_Help_Shows_Description_And_Footer(t *testing.T) {
 		t.Errorf("exit code = %d, want 0", code)
 	}
 
-	// Verify description is present
-	AssertContains(t, stdout, "A foundation for multi-agent development. Each worktree gets:")
-	AssertContains(t, stdout, "agent_id")
+	// Verify tagline is present
+	AssertContains(t, stdout, "wt - git worktree manager for agentic coding workflows")
 
 	// Verify footer hint is present
 	AssertContains(t, stdout, "Run 'wt <command> --help' for more information on a command.")

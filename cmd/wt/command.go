@@ -43,20 +43,9 @@ func (c *Command) Name() string {
 }
 
 // HelpLine returns the short help line for the main usage display.
-// If the command has aliases, they are shown inline: "remove, rm <name>".
+// Aliases are shown only in command-specific help, not in global listing.
 func (c *Command) HelpLine() string {
-	usage := c.Usage
-	if len(c.Aliases) > 0 {
-		// Insert aliases after the command name
-		name, rest, _ := strings.Cut(c.Usage, " ")
-
-		usage = name + ", " + strings.Join(c.Aliases, ", ")
-		if rest != "" {
-			usage += " " + rest
-		}
-	}
-
-	return fmt.Sprintf("  %-22s %s", usage, c.Short)
+	return fmt.Sprintf("  %-22s %s", c.Usage, c.Short)
 }
 
 // PrintHelp prints the full help output for "wt <cmd> --help".

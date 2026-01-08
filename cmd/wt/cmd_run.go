@@ -210,13 +210,6 @@ func printGlobalOptions(output io.Writer) {
 func printUsage(output io.Writer, commands []*Command) {
 	fprintln(output, "wt - git worktree manager for agentic coding workflows")
 	fprintln(output)
-	fprintln(output, "A foundation for multi-agent development. Each worktree gets:")
-	fprintln(output, "  • agent_id  — unique name (swift-fox) for routing, logs, communication")
-	fprintln(output, "  • id        — unique number for ports, DB prefixes, container names")
-	fprintln(output, "  • hooks     — automate setup/teardown (deps, Docker, migrations)")
-	fprintln(output)
-	fprintln(output, "Built for humans and agents: stdout is machine-parseable, stderr has context.")
-	fprintln(output)
 	fprintln(output, "Usage: wt [flags] <command> [args]")
 	fprintln(output)
 	fprintln(output, "Flags:")
