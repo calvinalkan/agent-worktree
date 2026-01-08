@@ -104,24 +104,7 @@ func execRemove(
 		}
 	}
 
-	// 4. Run pre-delete hook
-	hookRunner := NewHookRunner(fsys, mainRepoRoot, env, stdout, stderr)
-
-	err = hookRunner.RunPreDelete(ctx, &info, wtPath, cfg.EffectiveCwd)
-	if err != nil {
-		return fmt.Errorf("%w: %w", errPreDeleteHookAbortDelete, err)
-	}
-
-	// 5. Remove worktree
-	err = git.WorktreeRemove(ctx, mainRepoRoot, wtPath, force)
-	if err != nil {
-		return fmt.Errorf("%w: %w", errRemovingWorktreeFailed, err)
-	}
-
-	// 6. Show confirmation that worktree was removed
-	fprintln(stdout, "Removed worktree:", wtPath)
-
-	// 7. Determine branch deletion
+	// 4. Determine branch deletion before cleanup
 	deleteBranch := withBranch
 
 	if !withBranch && stdin != nil && IsTerminal() {
@@ -134,28 +117,10 @@ func execRemove(
 	}
 	// Non-interactive without --with-branch: keep branch (deleteBranch stays false)
 
-	// 8. Delete branch if requested
-	var branchErr error
+	// 5. Perform cleanup (hook, remove, branch delete, prune)
+	hookRunner := NewHookRunner(fsys, mainRepoRoot, env, stdout, stderr)
 
-	branchDeleted := false
-
-	if deleteBranch {
-		branchErr = git.BranchDelete(ctx, mainRepoRoot, name, force)
-		if branchErr == nil {
-			branchDeleted = true
-		}
-	}
-
-	// 9. Prune worktree metadata (always run, independent of branch deletion)
-	pruneErr := git.WorktreePrune(ctx, mainRepoRoot)
-
-	// 10. Output what actually happened with branch
-	if branchDeleted {
-		fprintln(stdout, "Deleted branch:", name)
-	}
-
-	// 11. Return combined errors if any
-	return errors.Join(branchErr, pruneErr)
+	return CleanupWorktree(ctx, stdout, git, hookRunner, &info, wtPath, mainRepoRoot, cfg.EffectiveCwd, deleteBranch, force)
 }
 
 // readYesNo reads a yes/no response from stdin.
@@ -169,4 +134,74 @@ func readYesNo(stdin io.Reader) bool {
 	}
 
 	return strings.EqualFold(strings.TrimSpace(response), "y")
+}
+
+// CleanupWorktree performs the core cleanup logic for removing a worktree.
+// This function is shared between 'wt remove' and 'wt merge' commands.
+//
+// It handles:
+// 1. Running pre-delete hook
+// 2. Removing the worktree (git worktree remove)
+// 3. Deleting the branch (optional, based on deleteBranch parameter)
+// 4. Pruning worktree metadata
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeouts
+//   - stdout: Writer for status messages ("Removed worktree:", "Deleted branch:")
+//   - git: Git operations interface
+//   - hookRunner: Hook executor for pre-delete hook
+//   - info: Worktree metadata (used for hook env vars and branch name)
+//   - wtPath: Absolute path to the worktree directory
+//   - mainRepoRoot: Absolute path to the main repository
+//   - sourceDir: Directory where the command was invoked (for hook WT_SOURCE)
+//   - deleteBranch: Whether to delete the git branch after removing worktree
+//   - force: Whether to force removal (ignore uncommitted changes)
+//
+// Errors are combined using errors.Join so multiple cleanup failures
+// (e.g., branch deletion and prune) are reported together.
+func CleanupWorktree(
+	ctx context.Context,
+	stdout io.Writer,
+	git *Git,
+	hookRunner *HookRunner,
+	info *WorktreeInfo,
+	wtPath, mainRepoRoot, sourceDir string,
+	deleteBranch, force bool,
+) error {
+	// 1. Run pre-delete hook
+	err := hookRunner.RunPreDelete(ctx, info, wtPath, sourceDir)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errPreDeleteHookAbortDelete, err)
+	}
+
+	// 2. Remove worktree
+	err = git.WorktreeRemove(ctx, mainRepoRoot, wtPath, force)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errRemovingWorktreeFailed, err)
+	}
+
+	fprintln(stdout, "Removed worktree:", wtPath)
+
+	// 3. Delete branch if requested
+	var branchErr error
+
+	branchDeleted := false
+
+	if deleteBranch {
+		branchErr = git.BranchDelete(ctx, mainRepoRoot, info.Name, force)
+		if branchErr == nil {
+			branchDeleted = true
+		}
+	}
+
+	// 4. Prune worktree metadata (always run, independent of branch deletion)
+	pruneErr := git.WorktreePrune(ctx, mainRepoRoot)
+
+	// Output branch deletion status
+	if branchDeleted {
+		fprintln(stdout, "Deleted branch:", info.Name)
+	}
+
+	// Return combined errors if any
+	return errors.Join(branchErr, pruneErr)
 }
