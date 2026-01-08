@@ -199,17 +199,17 @@ func Test_List_Shows_Help_When_Help_Flag(t *testing.T) {
 	AssertContains(t, stdout, "--json")
 }
 
-func Test_Delete_Shows_Help_When_Help_Flag(t *testing.T) {
+func Test_Remove_Shows_Help_When_Help_Flag(t *testing.T) {
 	t.Parallel()
 
 	c := NewCLITester(t)
-	stdout, stderr, code := c.Run("delete", "--help")
+	stdout, stderr, code := c.Run("remove", "--help")
 
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0\nstderr: %s", code, stderr)
 	}
 
-	AssertContains(t, stdout, "Usage: wt delete")
+	AssertContains(t, stdout, "Usage: wt remove")
 	AssertContains(t, stdout, "--force")
 	AssertContains(t, stdout, "--with-branch")
 }
@@ -772,7 +772,7 @@ func Test_Run_Delete_Fails_With_Error_When_Unknown_Flag(t *testing.T) {
 	c := NewCLITester(t)
 	initRealGitRepo(t, c.Dir)
 
-	_, stderr, code := c.Run("delete", "somename", "--baz")
+	_, stderr, code := c.Run("remove", "somename", "--baz")
 
 	if code != 1 {
 		t.Errorf("expected exit code 1, got %d", code)
@@ -864,13 +864,13 @@ func Test_Run_Error_Messages_Start_With_Error_Prefix_For_Unknown_Command(t *test
 	AssertContains(t, stderr, "error:")
 }
 
-func Test_Run_Error_Messages_Start_With_Error_Prefix_For_Delete_Without_Arg(t *testing.T) {
+func Test_Run_Error_Messages_Start_With_Error_Prefix_For_Remove_Without_Arg(t *testing.T) {
 	t.Parallel()
 
 	c := NewCLITester(t)
 	initRealGitRepo(t, c.Dir)
 
-	_, stderr, code := c.Run("delete")
+	_, stderr, code := c.Run("remove")
 
 	if code != 1 {
 		t.Errorf("expected exit code 1, got %d", code)
@@ -938,13 +938,13 @@ func Test_Run_Error_Messages_Start_With_Error_Prefix_For_Unknown_Flag(t *testing
 	AssertContains(t, stderr, "error:")
 }
 
-func Test_Run_Delete_Fails_When_Worktree_Not_Found(t *testing.T) {
+func Test_Run_Remove_Fails_When_Worktree_Not_Found(t *testing.T) {
 	t.Parallel()
 
 	c := NewCLITester(t)
 	initRealGitRepo(t, c.Dir)
 
-	_, stderr, code := c.Run("delete", "nonexistent-worktree")
+	_, stderr, code := c.Run("remove", "nonexistent-worktree")
 
 	if code != 1 {
 		t.Errorf("expected exit code 1, got %d", code)

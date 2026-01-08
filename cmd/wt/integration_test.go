@@ -105,14 +105,14 @@ func Test_FullWorkflow_Create_List_Info_Delete(t *testing.T) {
 		t.Errorf("expected base_branch 'master', got %q", info.BaseBranch)
 	}
 
-	// Step 6: Delete first worktree
-	deleteOut, stderr, code := c.Run("--config", "config.json", "delete", "feature-a", "--with-branch", "--force")
+	// Step 6: Remove first worktree
+	removeOut, stderr, code := c.Run("--config", "config.json", "remove", "feature-a", "--with-branch", "--force")
 	if code != 0 {
-		t.Fatalf("delete feature-a failed: %s", stderr)
+		t.Fatalf("remove feature-a failed: %s", stderr)
 	}
 
-	AssertContains(t, deleteOut, "Deleted worktree directory:")
-	AssertContains(t, deleteOut, "Deleted branch: feature-a")
+	AssertContains(t, removeOut, "Removed worktree:")
+	AssertContains(t, removeOut, "Deleted branch: feature-a")
 
 	// Step 7: List should show only second worktree
 	listOut, stderr, code = c.Run("--config", "config.json", "ls")
@@ -131,15 +131,15 @@ func Test_FullWorkflow_Create_List_Info_Delete(t *testing.T) {
 
 	AssertContains(t, createOut3, "id:          3")
 
-	// Step 9: Delete remaining worktrees
-	_, stderr, code = c.Run("--config", "config.json", "delete", "feature-b", "--with-branch", "--force")
+	// Step 9: Remove remaining worktrees
+	_, stderr, code = c.Run("--config", "config.json", "remove", "feature-b", "--with-branch", "--force")
 	if code != 0 {
-		t.Fatalf("delete feature-b failed: %s", stderr)
+		t.Fatalf("remove feature-b failed: %s", stderr)
 	}
 
-	_, stderr, code = c.Run("--config", "config.json", "delete", "feature-c", "--with-branch", "--force")
+	_, stderr, code = c.Run("--config", "config.json", "remove", "feature-c", "--with-branch", "--force")
 	if code != 0 {
-		t.Fatalf("delete feature-c failed: %s", stderr)
+		t.Fatalf("remove feature-c failed: %s", stderr)
 	}
 
 	// Step 10: List should be empty (just header or empty)
@@ -183,10 +183,10 @@ echo "DELETING: $WT_NAME" >> "$WT_REPO_ROOT/hook-log.txt"
 		t.Fatalf("create failed: %s", stderr)
 	}
 
-	// Delete worktree
-	_, stderr, code = c.Run("--config", "config.json", "delete", "hook-wt", "--with-branch", "--force")
+	// Remove worktree
+	_, stderr, code = c.Run("--config", "config.json", "remove", "hook-wt", "--with-branch", "--force")
 	if code != 0 {
-		t.Fatalf("delete failed: %s", stderr)
+		t.Fatalf("remove failed: %s", stderr)
 	}
 
 	// Verify hooks ran in order

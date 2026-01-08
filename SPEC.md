@@ -25,7 +25,7 @@ Built for humans and agents alike. Clean stdout/stderr separation: stdout is alw
 machine-parseable (paths, JSON), stderr carries context and errors. Agents can invoke
 `wt` directly to self-manage their worktrees.
 
-Built in Go. No dependencies. Thoroughly tested.
+Built in Go. Thoroughly e2e tested.
 
 ---
 

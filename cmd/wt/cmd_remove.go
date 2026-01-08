@@ -14,9 +14,9 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
-// Errors for delete command.
+// Errors for remove command.
 var (
-	errWorktreeNameRequired     = errors.New("worktree name is required (usage: wt delete <name>)")
+	errWorktreeNameRequired     = errors.New("worktree name is required (usage: wt remove <name>)")
 	errWorktreeNotFound         = errors.New("worktree not found")
 	errWorktreeHasChanges       = errors.New("worktree has uncommitted changes (use --force to override)")
 	errRemovingWorktreeFailed   = errors.New("removing worktree")
@@ -25,18 +25,19 @@ var (
 	errPreDeleteHookAbortDelete = errors.New("pre-delete hook aborted deletion (hook exited non-zero)")
 )
 
-// DeleteCmd returns the delete command.
-func DeleteCmd(cfg Config, fsys fs.FS, git *Git, env map[string]string) *Command {
-	flags := flag.NewFlagSet("delete", flag.ContinueOnError)
+// RemoveCmd returns the remove command.
+func RemoveCmd(cfg Config, fsys fs.FS, git *Git, env map[string]string) *Command {
+	flags := flag.NewFlagSet("remove", flag.ContinueOnError)
 	flags.BoolP("help", "h", false, "Show help")
-	flags.BoolP("force", "f", false, "Delete even if worktree has uncommitted changes")
-	flags.BoolP("with-branch", "b", false, "Delete the git branch (skips interactive prompt)")
+	flags.BoolP("force", "f", false, "Remove even if worktree has uncommitted changes")
+	flags.BoolP("with-branch", "b", false, "Also delete the git branch (skips interactive prompt)")
 
 	return &Command{
-		Flags: flags,
-		Usage: "delete <name> [flags]",
-		Short: "Delete a worktree",
-		Long: `Delete a worktree by name.
+		Flags:   flags,
+		Usage:   "remove <name> [flags]",
+		Short:   "Remove a worktree",
+		Aliases: []string{"rm"},
+		Long: `Remove a worktree by name.
 
 Removes the worktree directory and git worktree metadata. If the worktree
 has uncommitted changes, use --force to proceed.
@@ -48,12 +49,12 @@ In non-interactive mode (scripts/pipes), the branch is kept unless
 If .wt/hooks/pre-delete exists and is executable, it runs before deletion
 and can abort the operation by exiting non-zero.`,
 		Exec: func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, args []string) error {
-			return execDelete(ctx, stdin, stdout, stderr, cfg, fsys, git, env, flags, args)
+			return execRemove(ctx, stdin, stdout, stderr, cfg, fsys, git, env, flags, args)
 		},
 	}
 }
 
-func execDelete(
+func execRemove(
 	ctx context.Context,
 	stdin io.Reader,
 	stdout, stderr io.Writer,
@@ -117,8 +118,8 @@ func execDelete(
 		return fmt.Errorf("%w: %w", errRemovingWorktreeFailed, err)
 	}
 
-	// 6. Show confirmation that worktree was deleted
-	fprintln(stdout, "Deleted worktree directory:", wtPath)
+	// 6. Show confirmation that worktree was removed
+	fprintln(stdout, "Removed worktree:", wtPath)
 
 	// 7. Determine branch deletion
 	deleteBranch := withBranch

@@ -91,12 +91,15 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 		CreateCmd(cfg, fsys, git, env),
 		LsCmd(cfg, fsys, git),
 		InfoCmd(cfg, fsys, git),
-		DeleteCmd(cfg, fsys, git, env),
+		RemoveCmd(cfg, fsys, git, env),
 	}
 
-	commandMap := make(map[string]*Command, len(commands))
+	commandMap := make(map[string]*Command, len(commands)*2)
 	for _, cmd := range commands {
 		commandMap[cmd.Name()] = cmd
+		for _, alias := range cmd.Aliases {
+			commandMap[alias] = cmd
+		}
 	}
 
 	commandAndArgs := globalFlags.Args()

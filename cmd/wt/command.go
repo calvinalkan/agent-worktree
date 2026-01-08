@@ -17,7 +17,7 @@ type Command struct {
 
 	// Usage is the freeform usage string shown after "wt" in help.
 	// Includes the command name and arguments/flags.
-	// Examples: "create [flags]", "list [flags]", "delete <name> [flags]"
+	// Examples: "create [flags]", "list [flags]", "remove <name> [flags]"
 	Usage string
 
 	// Short is a one-line description for the global help listing.
@@ -26,6 +26,10 @@ type Command struct {
 	// Long is the full description shown in command help.
 	// If empty, Short is used instead.
 	Long string
+
+	// Aliases are alternative names for this command.
+	// The primary name comes from Usage, aliases are additional.
+	Aliases []string
 
 	// Exec runs the command after flags are parsed.
 	Exec func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, args []string) error
@@ -39,13 +43,31 @@ func (c *Command) Name() string {
 }
 
 // HelpLine returns the short help line for the main usage display.
+// If the command has aliases, they are shown inline: "remove, rm <name>".
 func (c *Command) HelpLine() string {
-	return fmt.Sprintf("  %-22s %s", c.Usage, c.Short)
+	usage := c.Usage
+	if len(c.Aliases) > 0 {
+		// Insert aliases after the command name
+		name, rest, _ := strings.Cut(c.Usage, " ")
+
+		usage = name + ", " + strings.Join(c.Aliases, ", ")
+		if rest != "" {
+			usage += " " + rest
+		}
+	}
+
+	return fmt.Sprintf("  %-22s %s", usage, c.Short)
 }
 
 // PrintHelp prints the full help output for "wt <cmd> --help".
 func (c *Command) PrintHelp(output io.Writer) {
 	fprintln(output, "Usage: wt", c.Usage)
+
+	if len(c.Aliases) > 0 {
+		fprintln(output)
+		fprintln(output, "Aliases:", strings.Join(c.Aliases, ", "))
+	}
+
 	fprintln(output)
 
 	desc := c.Long

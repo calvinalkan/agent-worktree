@@ -578,10 +578,10 @@ EOF
 		t.Fatalf("create failed: %s", stderr)
 	}
 
-	// Delete worktree (with --force because new worktrees have uncommitted .wt/worktree.json)
-	_, stderr, code = c.Run("--config", "config.json", "delete", "delete-env-test", "--with-branch", "--force")
+	// Remove worktree (with --force because new worktrees have uncommitted .wt/worktree.json)
+	_, stderr, code = c.Run("--config", "config.json", "remove", "delete-env-test", "--with-branch", "--force")
 	if code != 0 {
-		t.Fatalf("delete failed: %s", stderr)
+		t.Fatalf("remove failed: %s", stderr)
 	}
 
 	// Check env was captured before deletion
@@ -879,9 +879,9 @@ done
 	testTimeout := 5 * time.Second
 	deadline := time.Now().Add(testTimeout)
 
-	// Start delete with signal channel
+	// Start remove with signal channel
 	sigCh := make(chan os.Signal, 1)
-	done := c.RunWithSignal(sigCh, "--config", "config.json", "delete", "to-delete", "--force")
+	done := c.RunWithSignal(sigCh, "--config", "config.json", "remove", "to-delete", "--force")
 
 	// Poll for hook to start
 	for !c.FileExists("hook-started.txt") {
@@ -951,9 +951,9 @@ echo "survived" > "$WT_REPO_ROOT/hook-survived.txt"
 	testTimeout := 15 * time.Second
 	deadline := time.Now().Add(testTimeout)
 
-	// Start delete with signal channel
+	// Start remove with signal channel
 	sigCh := make(chan os.Signal, 1)
-	done := c.RunWithSignal(sigCh, "--config", "config.json", "delete", "to-delete", "--force")
+	done := c.RunWithSignal(sigCh, "--config", "config.json", "remove", "to-delete", "--force")
 
 	// Poll for hook to start
 	for !c.FileExists("hook-started.txt") {

@@ -679,22 +679,22 @@ func Test_List_After_Delete_Shows_Remaining_Worktrees(t *testing.T) {
 	}
 
 	if len(worktrees) != 2 {
-		t.Fatalf("expected 2 worktrees before delete, got %d", len(worktrees))
+		t.Fatalf("expected 2 worktrees before remove, got %d", len(worktrees))
 	}
 
-	// Delete one worktree (force needed since .wt/worktree.json is uncommitted)
-	c.MustRun("--config", "config.json", "delete", "wt-delete", "--with-branch", "--force")
+	// Remove one worktree (force needed since .wt/worktree.json is uncommitted)
+	c.MustRun("--config", "config.json", "remove", "wt-delete", "--with-branch", "--force")
 
 	// Verify only one remains
 	stdout = c.MustRun("--config", "config.json", "ls", "--json")
 
 	err = json.Unmarshal([]byte(stdout), &worktrees)
 	if err != nil {
-		t.Fatalf("invalid JSON output after delete: %v\n%s", err, stdout)
+		t.Fatalf("invalid JSON output after remove: %v\n%s", err, stdout)
 	}
 
 	if len(worktrees) != 1 {
-		t.Errorf("expected 1 worktree after delete, got %d", len(worktrees))
+		t.Errorf("expected 1 worktree after remove, got %d", len(worktrees))
 	}
 
 	if worktrees[0].Name != "wt-keep" {
