@@ -394,13 +394,12 @@ Hooks are executable files located in `.wt/hooks/`. They use shebang (`#!/bin/ba
 | `WT_ID` | Unique worktree number |
 | `WT_AGENT_ID` | Generated word combo identifier |
 | `WT_NAME` | Worktree directory/branch name |
-| `WT_PATH` | Absolute path to worktree |
+| `WT_PATH` | Absolute path to worktree (equals `$PWD`) |
 | `WT_BASE_BRANCH` | Branch worktree was created from |
 | `WT_REPO_ROOT` | Absolute path to main repository |
-| `WT_SOURCE` | Absolute path to directory where command was invoked |
 
 **Execution**:
-- Hooks run with current working directory set to effective cwd (where `wt` was invoked, or `-C` path if provided)
+- Hooks run with working directory set to the worktree (`$PWD` = `$WT_PATH`)
 - All `WT_*` environment variables are available
 - Hook stdout and stderr are displayed to the user (e.g., to show "Installing dependencies...")
 - Hooks must be executable (`chmod +x`)
@@ -544,16 +543,14 @@ $ wt -C ~/code/other-repo ls
 ```bash
 #!/bin/bash
 set -e
-cd "$WT_PATH"
 npm install
-cp "$WT_SOURCE/.env" "$WT_PATH/.env" 2>/dev/null || true
+cp "$WT_REPO_ROOT/.env" .env 2>/dev/null || true
 ```
 
 **`.wt/hooks/post-create`** (with Docker):
 ```bash
 #!/bin/bash
 set -e
-cd "$WT_PATH"
 bun install
 
 # Use WT_ID for unique port
@@ -567,6 +564,5 @@ bun run migrate
 **`.wt/hooks/pre-delete`**:
 ```bash
 #!/bin/bash
-cd "$WT_PATH"
 docker compose -p "db-$WT_ID" down -v 2>/dev/null || true
 ```

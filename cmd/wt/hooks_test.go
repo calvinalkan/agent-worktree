@@ -242,7 +242,6 @@ echo "NAME=$WT_NAME"
 echo "PATH_VAR=$WT_PATH"
 echo "BASE_BRANCH=$WT_BASE_BRANCH"
 echo "REPO_ROOT=$WT_REPO_ROOT"
-echo "SOURCE=$WT_SOURCE"
 `
 
 	writeExecutableFile(t, hookPath, []byte(hookScript))
@@ -260,7 +259,6 @@ echo "SOURCE=$WT_SOURCE"
 		"WT_PATH":        "/path/to/worktree",
 		"WT_BASE_BRANCH": "master",
 		"WT_REPO_ROOT":   "/path/to/repo",
-		"WT_SOURCE":      "/path/to/source",
 	}
 
 	err = runHook(
@@ -287,7 +285,6 @@ echo "SOURCE=$WT_SOURCE"
 		"PATH_VAR=/path/to/worktree",
 		"BASE_BRANCH=master",
 		"REPO_ROOT=/path/to/repo",
-		"SOURCE=/path/to/source",
 	}
 
 	for _, expected := range expectedVars {
@@ -297,7 +294,7 @@ echo "SOURCE=$WT_SOURCE"
 	}
 }
 
-func Test_runHook_Uses_Cwd(t *testing.T) {
+func Test_runHook_Uses_WtPath_As_Working_Directory(t *testing.T) {
 	t.Parallel()
 
 	if runtime.GOOS == windowsOS {
@@ -305,7 +302,7 @@ func Test_runHook_Uses_Cwd(t *testing.T) {
 	}
 
 	repoDir := t.TempDir()
-	cwdDir := t.TempDir()
+	wtPath := t.TempDir() // Simulated worktree path
 	fsys := fs.NewReal()
 
 	// Create hook that prints pwd
@@ -333,7 +330,7 @@ func Test_runHook_Uses_Cwd(t *testing.T) {
 		"post-create",
 		map[string]string{"PATH": os.Getenv("PATH")},
 		map[string]string{},
-		cwdDir, // Different from repoDir
+		wtPath, // Hook runs in worktree directory
 		&stdout,
 		&stderr,
 	)
@@ -342,12 +339,12 @@ func Test_runHook_Uses_Cwd(t *testing.T) {
 	}
 
 	// Normalize paths for comparison (handle symlinks)
-	expectedCwd, _ := filepath.EvalSymlinks(cwdDir)
-	actualCwd := strings.TrimSpace(stdout.String())
-	actualCwd, _ = filepath.EvalSymlinks(actualCwd)
+	expectedWtPath, _ := filepath.EvalSymlinks(wtPath)
+	actualPwd := strings.TrimSpace(stdout.String())
+	actualPwd, _ = filepath.EvalSymlinks(actualPwd)
 
-	if actualCwd != expectedCwd {
-		t.Errorf("expected cwd %q, got %q", expectedCwd, actualCwd)
+	if actualPwd != expectedWtPath {
+		t.Errorf("hook pwd = %q, want %q (wtPath)", actualPwd, expectedWtPath)
 	}
 }
 
@@ -362,7 +359,7 @@ func Test_hookEnv_Creates_All_Variables(t *testing.T) {
 		Created:    time.Now(),
 	}
 
-	env := hookEnv(info, "/path/to/wt", "/path/to/repo", "/source/dir")
+	env := hookEnv(info, "/path/to/wt", "/path/to/repo")
 
 	expected := map[string]string{
 		"WT_ID":          "123",
@@ -371,7 +368,6 @@ func Test_hookEnv_Creates_All_Variables(t *testing.T) {
 		"WT_PATH":        "/path/to/wt",
 		"WT_BASE_BRANCH": "develop",
 		"WT_REPO_ROOT":   "/path/to/repo",
-		"WT_SOURCE":      "/source/dir",
 	}
 
 	for key, want := range expected {
@@ -424,7 +420,7 @@ func Test_HookRunner_RunPostCreate_Calls_Hook(t *testing.T) {
 
 	info := &WorktreeInfo{Name: "test", AgentID: "test-id", ID: 1, BaseBranch: "master"}
 
-	err = runner.RunPostCreate(context.Background(), info, "/wt/path", dir)
+	err = runner.RunPostCreate(context.Background(), info, dir)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -466,7 +462,7 @@ func Test_HookRunner_RunPreDelete_Calls_Hook(t *testing.T) {
 
 	info := &WorktreeInfo{Name: "test", AgentID: "test-id", ID: 1, BaseBranch: "master"}
 
-	err = runner.RunPreDelete(context.Background(), info, "/wt/path", dir)
+	err = runner.RunPreDelete(context.Background(), info, dir)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -499,7 +495,6 @@ WT_NAME=$WT_NAME
 WT_PATH=$WT_PATH
 WT_BASE_BRANCH=$WT_BASE_BRANCH
 WT_REPO_ROOT=$WT_REPO_ROOT
-WT_SOURCE=$WT_SOURCE
 EOF
 `
 	c.WriteExecutable(".wt/hooks/post-create", hookScript)
@@ -524,7 +519,6 @@ EOF
 	// Normalize paths for comparison (handle symlinks like /tmp -> /private/tmp on macOS)
 	expectedRepoRoot, _ := filepath.EvalSymlinks(c.Dir)
 	AssertContains(t, envContent, "WT_REPO_ROOT="+expectedRepoRoot)
-	AssertContains(t, envContent, "WT_SOURCE="+expectedRepoRoot)
 
 	// WT_AGENT_ID should be set (some adjective-animal combo)
 	if !strings.Contains(envContent, "WT_AGENT_ID=") {
@@ -567,7 +561,6 @@ WT_NAME=$WT_NAME
 WT_PATH=$WT_PATH
 WT_BASE_BRANCH=$WT_BASE_BRANCH
 WT_REPO_ROOT=$WT_REPO_ROOT
-WT_SOURCE=$WT_SOURCE
 EOF
 `
 	c.WriteExecutable(".wt/hooks/pre-delete", hookScript)
@@ -597,7 +590,7 @@ EOF
 	}
 }
 
-func Test_E2E_Hook_Working_Directory_Is_WT_SOURCE(t *testing.T) {
+func Test_E2E_Hook_Working_Directory_Is_WT_PATH(t *testing.T) {
 	t.Parallel()
 
 	if runtime.GOOS == windowsOS {
@@ -624,12 +617,12 @@ pwd > "$WT_PATH/hook-pwd.txt"
 	wtPath := extractPath(stdout)
 	hookPwd := strings.TrimSpace(c.ReadFileAt(wtPath, "hook-pwd.txt"))
 
-	// Normalize paths for comparison
-	expectedSource, _ := filepath.EvalSymlinks(c.Dir)
+	// Normalize paths for comparison - hook should run in worktree directory
+	expectedWtPath, _ := filepath.EvalSymlinks(wtPath)
 	actualPwd, _ := filepath.EvalSymlinks(hookPwd)
 
-	if actualPwd != expectedSource {
-		t.Errorf("hook pwd = %s, want %s (WT_SOURCE)", actualPwd, expectedSource)
+	if actualPwd != expectedWtPath {
+		t.Errorf("hook pwd = %s, want %s (WT_PATH)", actualPwd, expectedWtPath)
 	}
 }
 

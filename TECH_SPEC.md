@@ -409,10 +409,9 @@ hookEnv := map[string]string{
     "WT_ID":          strconv.Itoa(info.ID),
     "WT_AGENT_ID":    info.AgentID,
     "WT_NAME":        info.Name,
-    "WT_PATH":        wtPath,
+    "WT_PATH":        wtPath,  // equals $PWD (hook runs in worktree)
     "WT_BASE_BRANCH": info.BaseBranch,
     "WT_REPO_ROOT":   repoRoot,
-    "WT_SOURCE":      sourceDir,
 }
 ```
 

@@ -47,21 +47,24 @@ func NewHookRunner(fsys fs.FS, repoRoot string, baseEnv map[string]string, stdou
 }
 
 // RunPostCreate executes the post-create hook if it exists.
-func (h *HookRunner) RunPostCreate(ctx context.Context, info *WorktreeInfo, wtPath, sourceDir string) error {
-	wtEnv := hookEnv(info, wtPath, h.repoRoot, sourceDir)
+// The hook runs with working directory set to wtPath.
+func (h *HookRunner) RunPostCreate(ctx context.Context, info *WorktreeInfo, wtPath string) error {
+	wtEnv := hookEnv(info, wtPath, h.repoRoot)
 
-	return runHook(ctx, h.fsys, h.repoRoot, "post-create", h.baseEnv, wtEnv, sourceDir, h.stdout, h.stderr)
+	return runHook(ctx, h.fsys, h.repoRoot, "post-create", h.baseEnv, wtEnv, wtPath, h.stdout, h.stderr)
 }
 
 // RunPreDelete executes the pre-delete hook if it exists.
-func (h *HookRunner) RunPreDelete(ctx context.Context, info *WorktreeInfo, wtPath, sourceDir string) error {
-	wtEnv := hookEnv(info, wtPath, h.repoRoot, sourceDir)
+// The hook runs with working directory set to wtPath.
+func (h *HookRunner) RunPreDelete(ctx context.Context, info *WorktreeInfo, wtPath string) error {
+	wtEnv := hookEnv(info, wtPath, h.repoRoot)
 
-	return runHook(ctx, h.fsys, h.repoRoot, "pre-delete", h.baseEnv, wtEnv, sourceDir, h.stdout, h.stderr)
+	return runHook(ctx, h.fsys, h.repoRoot, "pre-delete", h.baseEnv, wtEnv, wtPath, h.stdout, h.stderr)
 }
 
 // hookEnv creates the WT_* environment variables available to hooks.
-func hookEnv(info *WorktreeInfo, wtPath, repoRoot, sourceDir string) map[string]string {
+// WT_PATH equals the hook's working directory ($PWD).
+func hookEnv(info *WorktreeInfo, wtPath, repoRoot string) map[string]string {
 	return map[string]string{
 		"WT_ID":          strconv.Itoa(info.ID),
 		"WT_AGENT_ID":    info.AgentID,
@@ -69,7 +72,6 @@ func hookEnv(info *WorktreeInfo, wtPath, repoRoot, sourceDir string) map[string]
 		"WT_PATH":        wtPath,
 		"WT_BASE_BRANCH": info.BaseBranch,
 		"WT_REPO_ROOT":   repoRoot,
-		"WT_SOURCE":      sourceDir,
 	}
 }
 
@@ -77,6 +79,7 @@ func hookEnv(info *WorktreeInfo, wtPath, repoRoot, sourceDir string) map[string]
 // hookName is "post-create" or "pre-delete".
 // baseEnv is the inherited environment (passed from Run()'s env parameter).
 // wtEnv contains the WT_* variables to add.
+// wtPath is the worktree path, used as the hook's working directory.
 // Returns nil if hook doesn't exist.
 // Returns error if hook exists but is not executable, or if execution fails.
 func runHook(
@@ -85,7 +88,7 @@ func runHook(
 	repoRoot string,
 	hookName string,
 	baseEnv, wtEnv map[string]string,
-	cwd string,
+	wtPath string,
 	stdout, stderr io.Writer,
 ) error {
 	hookPath := filepath.Join(repoRoot, ".wt", "hooks", hookName)
@@ -110,7 +113,7 @@ func runHook(
 	defer cancel()
 
 	cmd := exec.CommandContext(timeoutCtx, hookPath)
-	cmd.Dir = cwd
+	cmd.Dir = wtPath
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 

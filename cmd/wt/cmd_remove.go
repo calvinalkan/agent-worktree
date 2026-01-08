@@ -120,7 +120,7 @@ func execRemove(
 	// 5. Perform cleanup (hook, remove, branch delete, prune)
 	hookRunner := NewHookRunner(fsys, mainRepoRoot, env, stdout, stderr)
 
-	return CleanupWorktree(ctx, stdout, git, hookRunner, &info, wtPath, mainRepoRoot, cfg.EffectiveCwd, deleteBranch, force)
+	return CleanupWorktree(ctx, stdout, git, hookRunner, &info, wtPath, mainRepoRoot, deleteBranch, force)
 }
 
 // readYesNo reads a yes/no response from stdin.
@@ -140,7 +140,7 @@ func readYesNo(stdin io.Reader) bool {
 // This function is shared between 'wt remove' and 'wt merge' commands.
 //
 // It handles:
-// 1. Running pre-delete hook
+// 1. Running pre-delete hook (runs in wtPath directory)
 // 2. Removing the worktree (git worktree remove)
 // 3. Deleting the branch (optional, based on deleteBranch parameter)
 // 4. Pruning worktree metadata
@@ -151,9 +151,8 @@ func readYesNo(stdin io.Reader) bool {
 //   - git: Git operations interface
 //   - hookRunner: Hook executor for pre-delete hook
 //   - info: Worktree metadata (used for hook env vars and branch name)
-//   - wtPath: Absolute path to the worktree directory
+//   - wtPath: Absolute path to the worktree directory (hook runs here)
 //   - mainRepoRoot: Absolute path to the main repository
-//   - sourceDir: Directory where the command was invoked (for hook WT_SOURCE)
 //   - deleteBranch: Whether to delete the git branch after removing worktree
 //   - force: Whether to force removal (ignore uncommitted changes)
 //
@@ -165,11 +164,11 @@ func CleanupWorktree(
 	git *Git,
 	hookRunner *HookRunner,
 	info *WorktreeInfo,
-	wtPath, mainRepoRoot, sourceDir string,
+	wtPath, mainRepoRoot string,
 	deleteBranch, force bool,
 ) error {
-	// 1. Run pre-delete hook
-	err := hookRunner.RunPreDelete(ctx, info, wtPath, sourceDir)
+	// 1. Run pre-delete hook (in worktree directory)
+	err := hookRunner.RunPreDelete(ctx, info, wtPath)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errPreDeleteHookAbortDelete, err)
 	}

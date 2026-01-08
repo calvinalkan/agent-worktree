@@ -267,7 +267,7 @@ func execCreate(
 	// 13. Run post-create hook
 	hookRunner := NewHookRunner(fsys, mainRepoRoot, env, stdout, stderr)
 
-	err = hookRunner.RunPostCreate(ctx, info, wtPath, cfg.EffectiveCwd)
+	err = hookRunner.RunPostCreate(ctx, info, wtPath)
 	if err != nil {
 		// Rollback: remove worktree and delete branch
 		rmErr := git.WorktreeRemove(ctx, mainRepoRoot, wtPath, true)

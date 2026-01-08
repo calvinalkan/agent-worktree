@@ -390,7 +390,6 @@ func Test_Create_Hook_Receives_Environment_Variables(t *testing.T) {
     echo "WT_PATH=$WT_PATH"
     echo "WT_BASE_BRANCH=$WT_BASE_BRANCH"
     echo "WT_REPO_ROOT=$WT_REPO_ROOT"
-    echo "WT_SOURCE=$WT_SOURCE"
 } > "$WT_PATH/env-dump.txt"
 `
 	cli.WriteExecutable(".wt/hooks/post-create", hookScript)
@@ -410,7 +409,6 @@ func Test_Create_Hook_Receives_Environment_Variables(t *testing.T) {
 	AssertContains(t, envContent, "WT_NAME=env-test")
 	AssertContains(t, envContent, "WT_BASE_BRANCH=master")
 	AssertContains(t, envContent, "WT_REPO_ROOT="+cli.Dir)
-	AssertContains(t, envContent, "WT_SOURCE="+cli.Dir)
 	AssertContains(t, envContent, "WT_PATH="+filepath.Join(cli.Dir, "worktrees", "env-test"))
 
 	// WT_AGENT_ID should be an adjective-animal format (contains a hyphen)
