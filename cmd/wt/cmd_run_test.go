@@ -156,13 +156,13 @@ func Test_List_Shows_Help_When_Help_Flag(t *testing.T) {
 	t.Parallel()
 
 	c := NewCLITester(t)
-	stdout, stderr, code := c.Run("list", "--help")
+	stdout, stderr, code := c.Run("ls", "--help")
 
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0\nstderr: %s", code, stderr)
 	}
 
-	AssertContains(t, stdout, "Usage: wt list")
+	AssertContains(t, stdout, "Usage: wt ls")
 	AssertContains(t, stdout, "--json")
 }
 
@@ -187,7 +187,7 @@ func Test_Run_Uses_Cwd_When_Cwd_Flag(t *testing.T) {
 	c := NewCLITester(t)
 	c.InitGitRepo()
 
-	stdout, stderr, code := c.Run("list")
+	stdout, stderr, code := c.Run("ls")
 	if code != 0 {
 		t.Logf("stdout: %s", stdout)
 		t.Logf("stderr: %s", stderr)
@@ -201,7 +201,7 @@ func Test_Run_Uses_Custom_Config_When_Config_Flag(t *testing.T) {
 	c.WriteFile("custom-config.json", `{"base": "/custom/path"}`)
 	c.InitGitRepo()
 
-	_, _, code := c.Run("--config", "custom-config.json", "list")
+	_, _, code := c.Run("--config", "custom-config.json", "ls")
 	_ = code
 }
 
@@ -639,7 +639,7 @@ func Test_Config_Returns_Error_When_Explicit_Config_File_Has_Invalid_JSON(t *tes
 	// Create invalid JSON config
 	c.WriteFile("bad.json", `{invalid json}`)
 
-	_, stderr, code := c.Run("--config", "bad.json", "list")
+	_, stderr, code := c.Run("--config", "bad.json", "ls")
 
 	if code != 1 {
 		t.Errorf("expected exit code 1, got %d", code)
@@ -656,7 +656,7 @@ func Test_Config_Uses_Defaults_When_Missing_Explicit_Config_File(t *testing.T) {
 
 	// Reference a config file that doesn't exist - should use defaults (not error)
 	// Use list command to avoid creating branches that might conflict
-	_, stderr, code := c.Run("--config", "nonexistent.json", "list")
+	_, stderr, code := c.Run("--config", "nonexistent.json", "ls")
 
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
@@ -676,7 +676,7 @@ func Test_Config_List_Works_With_Tilde_In_Path(t *testing.T) {
 	c.WriteFile(".wt/config.json", `{"base": "~/test-worktrees-list"}`)
 
 	// List should succeed even with no worktrees
-	_, stderr, code := c.Run("list")
+	_, stderr, code := c.Run("ls")
 
 	if code != 0 {
 		t.Fatalf("expected exit code 0, got %d\nstderr: %s", code, stderr)
@@ -707,7 +707,7 @@ func Test_Run_List_Fails_With_Error_When_Unknown_Flag(t *testing.T) {
 	c := NewCLITester(t)
 	initRealGitRepo(t, c.Dir)
 
-	_, stderr, code := c.Run("list", "--foo")
+	_, stderr, code := c.Run("ls", "--foo")
 
 	if code != 1 {
 		t.Errorf("expected exit code 1, got %d", code)
@@ -754,7 +754,7 @@ func Test_Run_Fails_With_Error_When_Unknown_Global_Flag(t *testing.T) {
 
 	c := NewCLITester(t)
 
-	_, stderr, code := c.Run("--unknown", "list")
+	_, stderr, code := c.Run("--unknown", "ls")
 
 	if code != 1 {
 		t.Errorf("expected exit code 1, got %d", code)
@@ -772,7 +772,7 @@ func Test_Run_Fails_When_Cwd_Directory_Does_Not_Exist(t *testing.T) {
 	c := NewCLITester(t)
 
 	// Use a completely non-existent path
-	_, stderr, code := c.RunWithInput(nil, "--cwd", "/nonexistent/path/that/does/not/exist", "list")
+	_, stderr, code := c.RunWithInput(nil, "--cwd", "/nonexistent/path/that/does/not/exist", "ls")
 
 	if code != 1 {
 		t.Errorf("expected exit code 1, got %d", code)
@@ -790,7 +790,7 @@ func Test_Run_Fails_When_Config_File_Has_Invalid_JSON(t *testing.T) {
 
 	c.WriteFile("bad.json", "{invalid json content}")
 
-	_, stderr, code := c.Run("--config", "bad.json", "list")
+	_, stderr, code := c.Run("--config", "bad.json", "ls")
 
 	if code != 1 {
 		t.Errorf("expected exit code 1, got %d", code)
@@ -852,7 +852,7 @@ func Test_Run_Error_Messages_Start_With_Error_Prefix_For_Not_Git_Repository(t *t
 	c := NewCLITester(t)
 	// Don't init git repo
 
-	_, stderr, code := c.Run("list")
+	_, stderr, code := c.Run("ls")
 
 	if code != 1 {
 		t.Errorf("expected exit code 1, got %d", code)

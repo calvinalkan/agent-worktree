@@ -56,7 +56,7 @@ func Test_FullWorkflow_Create_List_Info_Delete(t *testing.T) {
 	AssertContains(t, createOut2, "from:        develop")
 
 	// Step 3: List should show both worktrees
-	listOut, stderr, code := c.Run("--config", "config.json", "list")
+	listOut, stderr, code := c.Run("--config", "config.json", "ls")
 	if code != 0 {
 		t.Fatalf("list failed: %s", stderr)
 	}
@@ -115,7 +115,7 @@ func Test_FullWorkflow_Create_List_Info_Delete(t *testing.T) {
 	AssertContains(t, deleteOut, "Deleted branch: feature-a")
 
 	// Step 7: List should show only second worktree
-	listOut, stderr, code = c.Run("--config", "config.json", "list")
+	listOut, stderr, code = c.Run("--config", "config.json", "ls")
 	if code != 0 {
 		t.Fatalf("list failed: %s", stderr)
 	}
@@ -143,7 +143,7 @@ func Test_FullWorkflow_Create_List_Info_Delete(t *testing.T) {
 	}
 
 	// Step 10: List should be empty (just header or empty)
-	listOut, stderr, code = c.Run("--config", "config.json", "list")
+	listOut, stderr, code = c.Run("--config", "config.json", "ls")
 	if code != 0 {
 		t.Fatalf("list failed: %s", stderr)
 	}
@@ -225,7 +225,7 @@ func Test_Workflow_List_JSON_Is_Valid_And_Parseable(t *testing.T) {
 	}
 
 	// Get list as JSON
-	listJSON, stderr, code := c.Run("--config", "config.json", "list", "--json")
+	listJSON, stderr, code := c.Run("--config", "config.json", "ls", "--json")
 	if code != 0 {
 		t.Fatalf("list --json failed: %s", stderr)
 	}
@@ -302,7 +302,7 @@ func Test_Workflow_List_JSON_Parseable_By_Jq(t *testing.T) {
 	}
 
 	// Get list as JSON
-	listJSON, stderr, code := c.Run("--config", "config.json", "list", "--json")
+	listJSON, stderr, code := c.Run("--config", "config.json", "ls", "--json")
 	if code != 0 {
 		t.Fatalf("list --json failed: %s", stderr)
 	}
@@ -371,7 +371,7 @@ func Test_Workflow_Multiple_Worktrees_With_Different_Base_Branches(t *testing.T)
 	AssertContains(t, create3, "from:        release")
 
 	// List and verify all are present
-	listOut, stderr, code := c.Run("--config", "config.json", "list")
+	listOut, stderr, code := c.Run("--config", "config.json", "ls")
 	if code != 0 {
 		t.Fatalf("list failed: %s", stderr)
 	}

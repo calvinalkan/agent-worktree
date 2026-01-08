@@ -19,7 +19,7 @@ func Test_List_Returns_Error_When_Not_In_Git_Repo(t *testing.T) {
 	c := NewCLITester(t)
 	// Don't initialize git repo
 
-	_, stderr, code := c.Run("list")
+	_, stderr, code := c.Run("ls")
 
 	if code != 1 {
 		t.Errorf("expected exit code 1, got %d", code)
@@ -37,7 +37,7 @@ func Test_List_Returns_Empty_When_No_Worktrees(t *testing.T) {
 	// Use local config to isolate from other tests
 	c.WriteFile("config.json", `{"base": "worktrees"}`)
 
-	stdout, stderr, code := c.Run("--config", "config.json", "list")
+	stdout, stderr, code := c.Run("--config", "config.json", "ls")
 
 	if code != 0 {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
@@ -58,7 +58,7 @@ func Test_List_Help_Shows_Detailed_Description(t *testing.T) {
 
 	c := NewCLITester(t)
 
-	stdout, _, code := c.Run("list", "--help")
+	stdout, _, code := c.Run("ls", "--help")
 
 	if code != 0 {
 		t.Errorf("expected exit code 0, got %d", code)
@@ -83,7 +83,7 @@ func Test_List_JSON_Empty_Does_Not_Print_Message_To_Stderr(t *testing.T) {
 
 	c.WriteFile("config.json", `{"base": "worktrees"}`)
 
-	stdout, stderr, code := c.Run("--config", "config.json", "list", "--json")
+	stdout, stderr, code := c.Run("--config", "config.json", "ls", "--json")
 
 	if code != 0 {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
@@ -139,7 +139,7 @@ func Test_List_Shows_Worktrees_In_Table_Format(t *testing.T) {
 	// Use relative base path so it finds our worktrees dir
 	c.WriteFile("config.json", `{"base": "worktrees"}`)
 
-	stdout, stderr, code := c.Run("--config", "config.json", "list")
+	stdout, stderr, code := c.Run("--config", "config.json", "ls")
 
 	if code != 0 {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
@@ -195,7 +195,7 @@ func Test_List_Shows_Worktrees_In_JSON_Format(t *testing.T) {
 
 	c.WriteFile("config.json", `{"base": "worktrees"}`)
 
-	stdout, stderr, code := c.Run("--config", "config.json", "list", "--json")
+	stdout, stderr, code := c.Run("--config", "config.json", "ls", "--json")
 
 	if code != 0 {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
@@ -282,7 +282,7 @@ func Test_List_Shows_Multiple_Worktrees(t *testing.T) {
 
 	c.WriteFile("config.json", `{"base": "worktrees"}`)
 
-	stdout, stderr, code := c.Run("--config", "config.json", "list", "--json")
+	stdout, stderr, code := c.Run("--config", "config.json", "ls", "--json")
 
 	if code != 0 {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
@@ -347,7 +347,7 @@ func Test_List_Skips_Non_Managed_Directories(t *testing.T) {
 
 	c.WriteFile("config.json", `{"base": "worktrees"}`)
 
-	stdout, stderr, code := c.Run("--config", "config.json", "list", "--json")
+	stdout, stderr, code := c.Run("--config", "config.json", "ls", "--json")
 
 	if code != 0 {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
@@ -379,7 +379,7 @@ func Test_List_JSON_Empty_Returns_Empty_Array(t *testing.T) {
 	// Use local config to isolate from other tests
 	c.WriteFile("config.json", `{"base": "worktrees"}`)
 
-	stdout, stderr, code := c.Run("--config", "config.json", "list", "--json")
+	stdout, stderr, code := c.Run("--config", "config.json", "ls", "--json")
 
 	if code != 0 {
 		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
@@ -482,7 +482,7 @@ func Test_List_Single_Worktree_Created_With_Create_Command(t *testing.T) {
 	// Create a worktree using the create command
 	c.MustRun("--config", "config.json", "create", "--name", "test-wt")
 
-	stdout := c.MustRun("--config", "config.json", "list")
+	stdout := c.MustRun("--config", "config.json", "ls")
 
 	// Check table header
 	AssertContains(t, stdout, "NAME")
@@ -506,7 +506,7 @@ func Test_List_Multiple_Worktrees_Created_With_Create_Command(t *testing.T) {
 	c.MustRun("--config", "config.json", "create", "--name", "wt-two")
 	c.MustRun("--config", "config.json", "create", "--name", "wt-three")
 
-	stdout := c.MustRun("--config", "config.json", "list")
+	stdout := c.MustRun("--config", "config.json", "ls")
 
 	// All worktrees should appear
 	AssertContains(t, stdout, "wt-one")
@@ -525,7 +525,7 @@ func Test_List_JSON_Parses_Correctly_For_Created_Worktree(t *testing.T) {
 	// Create a worktree using the create command
 	c.MustRun("--config", "config.json", "create", "--name", "json-test")
 
-	stdout := c.MustRun("--config", "config.json", "list", "--json")
+	stdout := c.MustRun("--config", "config.json", "ls", "--json")
 
 	// Parse as JSON to verify structure
 	var worktrees []struct {
@@ -596,7 +596,7 @@ func Test_List_JSON_Multiple_Worktrees_Returns_Correct_Count(t *testing.T) {
 	c.MustRun("--config", "config.json", "create", "--name", "wt-alpha")
 	c.MustRun("--config", "config.json", "create", "--name", "wt-beta")
 
-	stdout := c.MustRun("--config", "config.json", "list", "--json")
+	stdout := c.MustRun("--config", "config.json", "ls", "--json")
 
 	var worktrees []jsonWorktree
 
@@ -638,7 +638,7 @@ func Test_List_Shows_Worktree_From_Different_Base_Branch(t *testing.T) {
 	// Create worktree from develop
 	c.MustRun("--config", "config.json", "create", "--name", "from-develop", "--from-branch", "develop")
 
-	stdout := c.MustRun("--config", "config.json", "list", "--json")
+	stdout := c.MustRun("--config", "config.json", "ls", "--json")
 
 	var worktrees []jsonWorktree
 
@@ -669,7 +669,7 @@ func Test_List_After_Delete_Shows_Remaining_Worktrees(t *testing.T) {
 	c.MustRun("--config", "config.json", "create", "--name", "wt-delete")
 
 	// Verify both exist
-	stdout := c.MustRun("--config", "config.json", "list", "--json")
+	stdout := c.MustRun("--config", "config.json", "ls", "--json")
 
 	var worktrees []jsonWorktree
 
@@ -686,7 +686,7 @@ func Test_List_After_Delete_Shows_Remaining_Worktrees(t *testing.T) {
 	c.MustRun("--config", "config.json", "delete", "wt-delete", "--with-branch", "--force")
 
 	// Verify only one remains
-	stdout = c.MustRun("--config", "config.json", "list", "--json")
+	stdout = c.MustRun("--config", "config.json", "ls", "--json")
 
 	err = json.Unmarshal([]byte(stdout), &worktrees)
 	if err != nil {
@@ -720,7 +720,7 @@ func Test_List_From_Inside_Worktree_Shows_All_Worktrees(t *testing.T) {
 
 	// List from inside the first worktree
 	wtPath := filepath.Join(c.Dir, "worktrees", "wt-first")
-	stdout, stderr, code := c.RunInDir(wtPath, "--config", "config.json", "list", "--json")
+	stdout, stderr, code := c.RunInDir(wtPath, "--config", "config.json", "ls", "--json")
 
 	if code != 0 {
 		t.Fatalf("list from worktree failed: %s", stderr)

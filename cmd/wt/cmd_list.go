@@ -14,15 +14,15 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
-// ListCmd returns the list command.
-func ListCmd(cfg Config, fsys fs.FS, git *Git) *Command {
-	flags := flag.NewFlagSet("list", flag.ContinueOnError)
+// LsCmd returns the ls command.
+func LsCmd(cfg Config, fsys fs.FS, git *Git) *Command {
+	flags := flag.NewFlagSet("ls", flag.ContinueOnError)
 	flags.BoolP("help", "h", false, "Show help")
 	flags.Bool("json", false, "Output as JSON")
 
 	return &Command{
 		Flags: flags,
-		Usage: "list [flags]",
+		Usage: "ls [flags]",
 		Short: "List worktrees for current repo",
 		Long: `List all worktrees managed by wt for the current repository.
 

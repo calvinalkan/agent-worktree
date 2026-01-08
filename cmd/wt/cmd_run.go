@@ -88,7 +88,7 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 	// Create all commands
 	commands := []*Command{
 		CreateCmd(cfg, fsys, git, env),
-		ListCmd(cfg, fsys, git),
+		LsCmd(cfg, fsys, git),
 		InfoCmd(cfg, fsys, git),
 		DeleteCmd(cfg, fsys, git, env),
 	}

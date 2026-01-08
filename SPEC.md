@@ -10,7 +10,7 @@
 
 ### Worktree Context
 
-All commands work from any directory within a repository or worktree, finding the nearest worktree scope automatically. For example, running `wt list` from inside worktree "swift-fox" shows all worktrees for the repository, and `wt create` creates a new sibling worktree (not a nested one).
+All commands work from any directory within a repository or worktree, finding the nearest worktree scope automatically. For example, running `wt ls` from inside worktree "swift-fox" shows all worktrees for the repository, and `wt create` creates a new sibling worktree (not a nested one).
 
 ---
 
@@ -195,7 +195,7 @@ Created worktree:
 
 ---
 
-#### `wt list`
+#### `wt ls`
 
 List worktrees for the current repository.
 
@@ -442,7 +442,7 @@ $ wt create --with-changes
 
 **List worktrees**:
 ```bash
-$ wt list
+$ wt ls
 NAME            PATH                                              CREATED
 swift-fox       ~/code/worktrees/my-repo/swift-fox                3 days ago
 feature-auth    ~/code/worktrees/my-repo/feature-auth             1 hour ago
@@ -450,7 +450,7 @@ feature-auth    ~/code/worktrees/my-repo/feature-auth             1 hour ago
 
 **List worktrees as JSON**:
 ```bash
-$ wt list --json
+$ wt ls --json
 ```
 
 **Show current worktree info**:
@@ -504,7 +504,7 @@ $ wt -c ./project-config.json create
 
 **Run from different directory**:
 ```bash
-$ wt -C ~/code/other-repo list
+$ wt -C ~/code/other-repo ls
 ```
 
 ---
