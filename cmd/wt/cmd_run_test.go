@@ -124,6 +124,20 @@ func Test_Run_Fails_When_Unknown_Command(t *testing.T) {
 	AssertContains(t, stderr, "error: unknown command")
 }
 
+func Test_Run_Shows_Blank_Line_Between_Error_And_Usage(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	_, stderr, code := c.Run("unknown")
+
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+
+	// Error message should be followed by blank line before usage help
+	AssertContains(t, stderr, "error: unknown command: unknown\n\nwt - git worktree manager")
+}
+
 func Test_Create_Shows_Help_When_Help_Flag(t *testing.T) {
 	t.Parallel()
 
@@ -762,6 +776,21 @@ func Test_Run_Fails_With_Error_When_Unknown_Global_Flag(t *testing.T) {
 
 	AssertContains(t, stderr, "unknown flag: --unknown")
 	AssertContains(t, stderr, "Usage:")
+}
+
+func Test_Run_Shows_Blank_Line_Between_Global_Flag_Error_And_Usage(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+
+	_, stderr, code := c.Run("--unknown", "ls")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	// Error message should be followed by blank line before usage help
+	AssertContains(t, stderr, "error: unknown flag: --unknown\n\nUsage:")
 }
 
 // Tests for global flag validation

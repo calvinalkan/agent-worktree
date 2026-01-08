@@ -42,6 +42,7 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 	err := globalFlags.Parse(args[1:])
 	if err != nil {
 		fprintln(stderr, "error:", err)
+		fprintln(stderr)
 		printGlobalOptions(stderr)
 
 		return 1
@@ -113,6 +114,7 @@ func Run(stdin io.Reader, stdout, stderr io.Writer, args []string, env map[strin
 	cmd, ok := commandMap[cmdName]
 	if !ok {
 		fprintln(stderr, "error: unknown command:", cmdName)
+		fprintln(stderr)
 		printUsage(stderr, commands)
 
 		return 1
