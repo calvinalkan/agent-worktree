@@ -1,7 +1,8 @@
 ---
 schema_version: 1
 id: d5ffkcg
-status: open
+status: closed
+closed: 2026-01-08T00:32:00Z
 blocked-by: []
 created: 2026-01-08T00:26:26Z
 type: bug

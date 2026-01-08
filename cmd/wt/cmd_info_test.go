@@ -73,7 +73,10 @@ func Test_Info_Returns_Error_When_Not_In_Worktree(t *testing.T) {
 		t.Errorf("expected exit code 1, got %d", code)
 	}
 
-	AssertContains(t, stderr, "not in a wt-managed worktree")
+	// Error message should clearly indicate this is a regular branch, not a worktree
+	AssertContains(t, stderr, "regular branch")
+	AssertContains(t, stderr, "not a worktree")
+	AssertContains(t, stderr, "wt list")
 }
 
 func Test_Info_Shows_Worktree_Info_In_Text_Format(t *testing.T) {
