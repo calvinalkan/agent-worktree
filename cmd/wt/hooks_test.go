@@ -163,8 +163,8 @@ func Test_runHook_Executes_Hook_Successfully(t *testing.T) {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	if !strings.Contains(stdout.String(), "hook executed") {
-		t.Errorf("expected stdout to contain 'hook executed', got: %q", stdout.String())
+	if !strings.Contains(stdout.String(), "hook(post-create): hook executed") {
+		t.Errorf("expected stdout to contain 'hook(post-create): hook executed', got: %q", stdout.String())
 	}
 }
 
@@ -340,7 +340,10 @@ func Test_runHook_Uses_WtPath_As_Working_Directory(t *testing.T) {
 
 	// Normalize paths for comparison (handle symlinks)
 	expectedWtPath, _ := filepath.EvalSymlinks(wtPath)
-	actualPwd := strings.TrimSpace(stdout.String())
+
+	// Strip prefix "hook(post-create): " from output
+	output := strings.TrimSpace(stdout.String())
+	actualPwd := strings.TrimPrefix(output, "hook(post-create): ")
 	actualPwd, _ = filepath.EvalSymlinks(actualPwd)
 
 	if actualPwd != expectedWtPath {
@@ -425,8 +428,8 @@ func Test_HookRunner_RunPostCreate_Calls_Hook(t *testing.T) {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	if !strings.Contains(stdout.String(), "post-create-ran") {
-		t.Errorf("expected stdout to contain 'post-create-ran', got: %q", stdout.String())
+	if !strings.Contains(stdout.String(), "hook(post-create): post-create-ran") {
+		t.Errorf("expected stdout to contain 'hook(post-create): post-create-ran', got: %q", stdout.String())
 	}
 }
 
@@ -467,8 +470,8 @@ func Test_HookRunner_RunPreDelete_Calls_Hook(t *testing.T) {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	if !strings.Contains(stdout.String(), "pre-delete-ran") {
-		t.Errorf("expected stdout to contain 'pre-delete-ran', got: %q", stdout.String())
+	if !strings.Contains(stdout.String(), "hook(pre-delete): pre-delete-ran") {
+		t.Errorf("expected stdout to contain 'hook(pre-delete): pre-delete-ran', got: %q", stdout.String())
 	}
 }
 

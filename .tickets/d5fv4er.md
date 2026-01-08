@@ -37,24 +37,73 @@ wt merge [--into <branch>] [--keep] [--dry-run]
    - Use: git worktree list --porcelain
    - Error if target worktree has uncommitted changes
 
-4. Rebase onto target
-   - Run: git rebase <target>
-   - On conflict:
-     - Get files: git diff --name-only --diff-filter=U
-     - Abort: git rebase --abort
-     - Print conflicting files and diff commands
-     - Exit with error
+4. Rebase + Merge (with retry loop)
+   - See "Concurrent Merge Handling" below
 
-5. Merge
-   - If target checked out elsewhere: git -C <target-wt> merge <feature> --ff-only
-   - If target not checked out: git checkout <target> && git merge <feature> --ff-only
-
-6. Cleanup (unless --keep)
+5. Cleanup (unless --keep)
    - Use shared cleanupWorktree function (from d5ftwxr)
    - Runs pre-delete hooks, removes worktree, deletes branch, prunes
 
-7. Print success
+6. Print success
 ```
+
+## Concurrent Merge Handling
+
+When multiple agents merge to the same target branch, a race condition can occur:
+
+```
+Agent A                              Agent B
+────────                             ────────
+rebase onto main (M)              
+                                     rebase onto main (M)
+merge -> main moves to M-A        
+                                     merge -> FAIL! (not FF-able)
+```
+
+After A merges, B's branch is based on old main and can't fast-forward.
+
+**Solution: Auto-retry loop**
+
+```go
+maxRetries := 3
+
+for attempt := 0; attempt < maxRetries; attempt++ {
+    // Rebase onto target
+    err := git.Rebase(ctx, wtPath, target)
+    if err != nil {
+        if isConflict(err) {
+            // Conflict - abort and fail (can't auto-resolve)
+            return handleConflict(err)
+        }
+        return err
+    }
+    
+    // Try merge
+    err = git.Merge(ctx, targetWt, feature, true) // ff-only
+    if err == nil {
+        break // Success!
+    }
+    
+    if !isNotFFError(err) {
+        return err // Some other error, don't retry
+    }
+    
+    // Target moved, retry
+    fprintf(stderr, "Target moved, retrying (%d/%d)...\n", attempt+1, maxRetries)
+}
+
+if attempt == maxRetries {
+    return fmt.Errorf("merge failed after %d retries (high contention on target branch)", maxRetries)
+}
+```
+
+**Retry only when:**
+- FF merge fails because target moved (not a conflict)
+
+**Don't retry when:**
+- Rebase conflict (requires manual resolution)
+- Other git errors
+- Max retries exceeded
 
 ## Dry Run Output
 
@@ -111,6 +160,69 @@ func (g *Git) Merge(ctx context.Context, dir, branch string, ffOnly bool) error
 8. Dirty target worktree (error)
 9. Nested worktree merge (wt-sub → wt-feature)
 10. Hooks (pre-delete runs)
+11. Concurrent merge (multiple agents merge simultaneously)
+
+## Concurrent Test Example
+
+```go
+func TestMerge_Concurrent(t *testing.T) {
+    c := NewCLITester(t)
+    initRealGitRepo(t, c.Dir)
+    c.WriteFile("config.json", `{"base": "worktrees"}`)
+    
+    n := 5
+    wtPaths := make([]string, n)
+    
+    // Create N worktrees, each with a commit
+    for i := 0; i < n; i++ {
+        name := fmt.Sprintf("feature-%d", i)
+        out := c.MustRun("--config", "config.json", "create", "-n", name)
+        wtPaths[i] = extractPath(out)
+        c.GitCommit(wtPaths[i], fmt.Sprintf("file-%d.txt", i), "content", fmt.Sprintf("commit %d", i))
+    }
+    
+    // Merge all concurrently
+    var wg sync.WaitGroup
+    errs := make([]error, n)
+    
+    for i := 0; i < n; i++ {
+        wg.Add(1)
+        go func(idx int) {
+            defer wg.Done()
+            wt := NewCLITesterAt(t, wtPaths[idx])
+            _, stderr, code := wt.Run("--config", "../config.json", "merge")
+            if code != 0 {
+                errs[idx] = fmt.Errorf("feature-%d: %s", idx, stderr)
+            }
+        }(i)
+    }
+    
+    wg.Wait()
+    
+    // All should succeed
+    for _, err := range errs {
+        if err != nil {
+            t.Error(err)
+        }
+    }
+    
+    // All commits on master
+    for i := 0; i < n; i++ {
+        if !c.BranchContainsCommit("master", fmt.Sprintf("commit %d", i)) {
+            t.Errorf("master missing commit %d", i)
+        }
+    }
+    
+    // All worktrees removed
+    for i := 0; i < n; i++ {
+        if c.WorktreeExists(fmt.Sprintf("feature-%d", i)) {
+            t.Errorf("feature-%d should be removed", i)
+        }
+    }
+}
+```
+
+If retry logic works → all succeed. If broken → some fail. No orchestration needed.
 
 ## Test Helpers to Add (testing_test.go)
 
@@ -132,4 +244,5 @@ func (c *CLI) GetCommitCount(branch string) int
 - Works with nested worktrees (target checked out elsewhere)
 - Uses shared cleanupWorktree function
 - All error states have clear messages with hints
+- Auto-retries if target moves between rebase and merge (up to 3 times)
 - E2E tests cover all scenarios listed above

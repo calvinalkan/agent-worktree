@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +15,66 @@ import (
 
 	"github.com/calvinalkan/agent-task/pkg/fs"
 )
+
+// prefixWriter wraps an io.Writer and prefixes each line with a string.
+type prefixWriter struct {
+	w       io.Writer
+	prefix  []byte
+	atStart bool // true if we're at the start of a line
+}
+
+// newPrefixWriter creates a writer that prefixes each line.
+func newPrefixWriter(w io.Writer, prefix string) *prefixWriter {
+	return &prefixWriter{
+		w:       w,
+		prefix:  []byte(prefix),
+		atStart: true,
+	}
+}
+
+// errPrefixWrite is returned when the underlying writer fails.
+var errPrefixWrite = errors.New("writing hook output")
+
+func (p *prefixWriter) Write(data []byte) (int, error) {
+	if len(data) == 0 {
+		return 0, nil
+	}
+
+	totalWritten := len(data) // Report original bytes to caller
+
+	for len(data) > 0 {
+		if p.atStart {
+			_, writeErr := p.w.Write(p.prefix)
+			if writeErr != nil {
+				return 0, fmt.Errorf("%w: %w", errPrefixWrite, writeErr)
+			}
+
+			p.atStart = false
+		}
+
+		idx := bytes.IndexByte(data, '\n')
+		if idx == -1 {
+			// No newline, write all remaining data
+			_, writeErr := p.w.Write(data)
+			if writeErr != nil {
+				return totalWritten, fmt.Errorf("%w: %w", errPrefixWrite, writeErr)
+			}
+
+			return totalWritten, nil
+		}
+
+		// Write up to and including newline
+		_, writeErr := p.w.Write(data[:idx+1])
+		if writeErr != nil {
+			return 0, fmt.Errorf("%w: %w", errPrefixWrite, writeErr)
+		}
+
+		data = data[idx+1:]
+		p.atStart = true
+	}
+
+	return totalWritten, nil
+}
 
 // hookTimeout is the maximum time a hook can run before being killed.
 const hookTimeout = 5 * time.Minute
@@ -114,8 +175,11 @@ func runHook(
 
 	cmd := exec.CommandContext(timeoutCtx, hookPath)
 	cmd.Dir = wtPath
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
+
+	// Prefix hook output so it's clear where it comes from
+	prefix := fmt.Sprintf("hook(%s): ", hookName)
+	cmd.Stdout = newPrefixWriter(stdout, prefix)
+	cmd.Stderr = newPrefixWriter(stderr, prefix)
 
 	// Send SIGTERM instead of SIGKILL on context cancellation.
 	// This gives hooks a chance to clean up gracefully.
