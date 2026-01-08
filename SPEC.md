@@ -10,7 +10,7 @@
 
 ### Worktree Context
 
-All commands can be run from within any worktree. For example, running `wt list` from inside worktree "swift-fox" shows all worktrees for the repository, and `wt create` creates a new sibling worktree (not a nested one).
+All commands work from any directory within a repository or worktree, finding the nearest worktree scope automatically. For example, running `wt list` from inside worktree "swift-fox" shows all worktrees for the repository, and `wt create` creates a new sibling worktree (not a nested one).
 
 ---
 
@@ -367,6 +367,7 @@ Hooks are executable files located in `.wt/hooks/`. They use shebang (`#!/bin/ba
 **Execution**:
 - Hooks run with current working directory set to effective cwd (where `wt` was invoked, or `-C` path if provided)
 - All `WT_*` environment variables are available
+- Hook stdout and stderr are displayed to the user (e.g., to show "Installing dependencies...")
 - Hooks must be executable (`chmod +x`)
 - If hook file does not exist, it is skipped (not an error)
 - If hook file exists but is not executable, exit with error

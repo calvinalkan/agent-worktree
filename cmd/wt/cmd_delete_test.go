@@ -227,6 +227,74 @@ func Test_Delete_WithBranch_Deletes_Branch(t *testing.T) {
 	AssertContains(t, stdout, "Deleted worktree and branch: delete-branch-wt")
 }
 
+func Test_Delete_Short_Flag_F_Works_Same_As_Force(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a worktree
+	_, stderr, code := c.Run("--config", "config.json", "create", "--name", "short-f-wt")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Make the worktree dirty
+	wtPath := filepath.Join(c.Dir, "worktrees", "short-f-wt")
+	dirtyFile := filepath.Join(wtPath, "dirty.txt")
+
+	err := os.WriteFile(dirtyFile, []byte("uncommitted"), 0o644)
+	if err != nil {
+		t.Fatalf("failed to create dirty file: %v", err)
+	}
+
+	// Delete with -f short flag (should work same as --force)
+	stdout, stderr, code := c.Run("--config", "config.json", "delete", "short-f-wt", "-f", "-b")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	AssertContains(t, stdout, "Deleted worktree and branch: short-f-wt")
+
+	// Verify worktree is gone
+	if c.FileExists("worktrees/short-f-wt") {
+		t.Error("worktree directory should be deleted")
+	}
+}
+
+func Test_Delete_Short_Flag_B_Works_Same_As_WithBranch(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a worktree
+	_, stderr, code := c.Run("--config", "config.json", "create", "--name", "short-b-wt")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Delete with -b short flag (should work same as --with-branch)
+	stdout, stderr, code := c.Run("--config", "config.json", "delete", "short-b-wt", "-b", "--force")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// Should say "and branch" because -b was used
+	AssertContains(t, stdout, "Deleted worktree and branch: short-b-wt")
+
+	// Verify worktree is gone
+	if c.FileExists("worktrees/short-b-wt") {
+		t.Error("worktree directory should be deleted")
+	}
+}
+
 func Test_Delete_Runs_PreDelete_Hook(t *testing.T) {
 	t.Parallel()
 
@@ -314,6 +382,8 @@ func Test_Delete_Help_Shows_Usage_And_Flags(t *testing.T) {
 	AssertContains(t, stdout, "Delete a worktree")
 	AssertContains(t, stdout, "--force")
 	AssertContains(t, stdout, "--with-branch")
+	AssertContains(t, stdout, "-f")
+	AssertContains(t, stdout, "-b")
 }
 
 func Test_Delete_Help_Shows_Detailed_Description(t *testing.T) {

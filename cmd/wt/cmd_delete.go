@@ -29,8 +29,8 @@ var (
 func DeleteCmd(cfg Config, fsys fs.FS, git *Git, env map[string]string) *Command {
 	flags := flag.NewFlagSet("delete", flag.ContinueOnError)
 	flags.BoolP("help", "h", false, "Show help")
-	flags.Bool("force", false, "Delete even if worktree has uncommitted changes")
-	flags.Bool("with-branch", false, "Delete the git branch (skips interactive prompt)")
+	flags.BoolP("force", "f", false, "Delete even if worktree has uncommitted changes")
+	flags.BoolP("with-branch", "b", false, "Delete the git branch (skips interactive prompt)")
 
 	return &Command{
 		Flags: flags,
