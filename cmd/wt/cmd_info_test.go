@@ -392,3 +392,212 @@ func Test_Info_Using_ExtractPath_And_NewCLITesterAt(t *testing.T) {
 		t.Errorf("extractField(name) = %q, want %q", name, "helpers-test-wt")
 	}
 }
+
+func Test_Info_Lookup_By_Name(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a worktree
+	_, stderr, code := c.Run("--config", "config.json", "create", "--name", "lookup-name-wt")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Lookup by name from main repo (not inside worktree)
+	stdout, stderr, code := c.Run("--config", "config.json", "info", "lookup-name-wt")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	AssertContains(t, stdout, "name:        lookup-name-wt")
+	AssertContains(t, stdout, "base_branch: master")
+}
+
+func Test_Info_Lookup_By_AgentID(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a worktree (agent_id will be auto-generated)
+	stdout, stderr, code := c.Run("--config", "config.json", "create")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Extract the agent_id from create output
+	agentID := extractField(stdout, "agent_id")
+	if agentID == "" {
+		t.Fatal("could not extract agent_id from create output")
+	}
+
+	// Lookup by agent_id from main repo
+	stdout, stderr, code = c.Run("--config", "config.json", "info", agentID)
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	AssertContains(t, stdout, "agent_id:    "+agentID)
+}
+
+func Test_Info_Lookup_By_NumericID(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a worktree
+	_, stderr, code := c.Run("--config", "config.json", "create", "--name", "lookup-id-wt")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Lookup by numeric id (first worktree gets id 1)
+	stdout, stderr, code := c.Run("--config", "config.json", "info", "1")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	AssertContains(t, stdout, "name:        lookup-id-wt")
+	AssertContains(t, stdout, "id:          1")
+}
+
+func Test_Info_Lookup_Returns_Error_When_Not_Found(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Lookup nonexistent worktree
+	_, stderr, code := c.Run("--config", "config.json", "info", "nonexistent-wt")
+
+	if code != 1 {
+		t.Errorf("expected exit code 1, got %d", code)
+	}
+
+	AssertContains(t, stderr, "worktree not found")
+	AssertContains(t, stderr, "nonexistent-wt")
+}
+
+func Test_Info_Lookup_With_Field_Flag(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a worktree
+	_, stderr, code := c.Run("--config", "config.json", "create", "--name", "field-lookup-wt")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Lookup by name with --field path
+	stdout, stderr, code := c.Run("--config", "config.json", "info", "field-lookup-wt", "--field", "path")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// Output should be just the path
+	output := strings.TrimSpace(stdout)
+	if !strings.Contains(output, "field-lookup-wt") {
+		t.Errorf("expected path to contain 'field-lookup-wt', got %q", output)
+	}
+
+	// Should not contain other fields
+	AssertNotContains(t, stdout, "name:")
+	AssertNotContains(t, stdout, "agent_id:")
+}
+
+func Test_Info_Lookup_With_JSON_Flag(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create a worktree
+	_, stderr, code := c.Run("--config", "config.json", "create", "--name", "json-lookup-wt")
+	if code != 0 {
+		t.Fatalf("create failed: %s", stderr)
+	}
+
+	// Lookup by name with --json
+	stdout, stderr, code := c.Run("--config", "config.json", "info", "json-lookup-wt", "--json")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	// Parse JSON output
+	var info infoJSON
+
+	err := json.Unmarshal([]byte(stdout), &info)
+	if err != nil {
+		t.Fatalf("failed to parse JSON: %v\noutput: %s", err, stdout)
+	}
+
+	if info.Name != "json-lookup-wt" {
+		t.Errorf("expected name 'json-lookup-wt', got %q", info.Name)
+	}
+}
+
+func Test_Info_Lookup_Multiple_Worktrees_Finds_Correct_One(t *testing.T) {
+	t.Parallel()
+
+	c := NewCLITester(t)
+	initRealGitRepo(t, c.Dir)
+
+	c.WriteFile("config.json", `{"base": "worktrees"}`)
+
+	// Create multiple worktrees
+	_, stderr, code := c.Run("--config", "config.json", "create", "--name", "wt-alpha")
+	if code != 0 {
+		t.Fatalf("create wt-alpha failed: %s", stderr)
+	}
+
+	_, stderr, code = c.Run("--config", "config.json", "create", "--name", "wt-beta")
+	if code != 0 {
+		t.Fatalf("create wt-beta failed: %s", stderr)
+	}
+
+	_, stderr, code = c.Run("--config", "config.json", "create", "--name", "wt-gamma")
+	if code != 0 {
+		t.Fatalf("create wt-gamma failed: %s", stderr)
+	}
+
+	// Lookup middle one by name
+	stdout, stderr, code := c.Run("--config", "config.json", "info", "wt-beta")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	AssertContains(t, stdout, "name:        wt-beta")
+	AssertContains(t, stdout, "id:          2")
+
+	// Lookup by ID
+	stdout, stderr, code = c.Run("--config", "config.json", "info", "3")
+
+	if code != 0 {
+		t.Errorf("expected exit code 0, got %d\nstderr: %s", code, stderr)
+	}
+
+	AssertContains(t, stdout, "name:        wt-gamma")
+}

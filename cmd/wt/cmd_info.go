@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strconv"
 
 	"github.com/calvinalkan/agent-task/pkg/fs"
 	flag "github.com/spf13/pflag"
@@ -17,6 +18,7 @@ var (
 	errNotInWorktree        = errors.New("this is a regular branch, not a worktree (use wt list to find worktrees)")
 	errWorktreeInfoNotFound = errors.New("worktree info not found (.wt/worktree.json missing)")
 	errInvalidField         = errors.New("invalid field (valid: name, agent_id, id, path, base_branch, created)")
+	errWorktreeNotFoundInfo = errors.New("worktree not found")
 )
 
 // InfoCmd returns the info command.
@@ -28,17 +30,26 @@ func InfoCmd(cfg Config, fsys fs.FS, git *Git) *Command {
 
 	return &Command{
 		Flags: flags,
-		Usage: "info [flags]",
-		Short: "Show current worktree info",
-		Long: `Display information about the current worktree.
+		Usage: "info [identifier] [flags]",
+		Short: "Show worktree info",
+		Long: `Display information about a worktree.
 
-Must be run from within a wt-managed worktree (created by 'wt create').
+Without arguments, shows info for the current worktree (must be inside a
+wt-managed worktree created by 'wt create').
 
-Use --field for scripting, e.g.:
-  wt info --field id      # Get worktree ID for port allocation
-  wt info --field path    # Get absolute path to worktree`,
-		Exec: func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, _ []string) error {
-			return execInfo(ctx, stdin, stdout, stderr, cfg, fsys, git, flags)
+With an identifier argument, looks up any worktree by:
+  • name      - the worktree directory/branch name
+  • agent_id  - the generated identifier (e.g., swift-fox)  
+  • id        - the numeric ID (e.g., 3)
+
+Examples:
+  wt info                     # Current worktree
+  wt info swift-fox           # Lookup by name or agent_id
+  wt info 3                   # Lookup by numeric ID
+  wt info --field id          # Get worktree ID for port allocation
+  wt info foo --field path    # Get path for a specific worktree`,
+		Exec: func(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, args []string) error {
+			return execInfo(ctx, stdin, stdout, stderr, cfg, fsys, git, flags, args)
 		},
 	}
 }
@@ -51,26 +62,50 @@ func execInfo(
 	fsys fs.FS,
 	git *Git,
 	flags *flag.FlagSet,
+	args []string,
 ) error {
 	jsonOutput, _ := flags.GetBool("json")
 	field, _ := flags.GetString("field")
 
-	// Verify we're in a git repository
-	_, err := git.RepoRoot(ctx, cfg.EffectiveCwd)
+	// Get main repo root (works from inside worktrees too)
+	mainRepoRoot, err := git.MainRepoRoot(ctx, cfg.EffectiveCwd)
 	if err != nil {
 		return ErrNotGitRepository
 	}
 
-	// Find worktree root (look for .wt/worktree.json walking up)
-	wtPath, err := findWorktreeRoot(fsys, cfg.EffectiveCwd)
-	if err != nil {
-		return errNotInWorktree
-	}
+	var info WorktreeInfo
 
-	// Read worktree metadata
-	info, err := readWorktreeInfo(fsys, wtPath)
-	if err != nil {
-		return fmt.Errorf("%w: %w", errWorktreeInfoNotFound, err)
+	var wtPath string
+
+	if len(args) > 0 {
+		// Lookup by identifier
+		identifier := args[0]
+
+		baseDir := resolveWorktreeBaseDir(cfg, mainRepoRoot)
+
+		worktrees, findErr := findWorktreesWithPaths(fsys, baseDir)
+		if findErr != nil {
+			return fmt.Errorf("scanning worktrees: %w", findErr)
+		}
+
+		wt, found := findWorktreeByIdentifier(worktrees, identifier)
+		if !found {
+			return fmt.Errorf("%w: %s", errWorktreeNotFoundInfo, identifier)
+		}
+
+		info = wt.WorktreeInfo
+		wtPath = wt.Path
+	} else {
+		// Current worktree mode
+		wtPath, err = findWorktreeRoot(fsys, cfg.EffectiveCwd)
+		if err != nil {
+			return errNotInWorktree
+		}
+
+		info, err = readWorktreeInfo(fsys, wtPath)
+		if err != nil {
+			return fmt.Errorf("%w: %w", errWorktreeInfoNotFound, err)
+		}
 	}
 
 	// If --field is specified, output only that field
@@ -84,6 +119,28 @@ func execInfo(
 	}
 
 	return outputInfoText(stdout, &info, wtPath)
+}
+
+// findWorktreeByIdentifier searches worktrees by name, agent_id, or numeric id.
+func findWorktreeByIdentifier(worktrees []WorktreeWithPath, identifier string) (WorktreeWithPath, bool) {
+	// Try numeric ID first
+	id, err := strconv.Atoi(identifier)
+	if err == nil {
+		for _, wt := range worktrees {
+			if wt.ID == id {
+				return wt, true
+			}
+		}
+	}
+
+	// Try name or agent_id
+	for _, wt := range worktrees {
+		if wt.Name == identifier || wt.AgentID == identifier {
+			return wt, true
+		}
+	}
+
+	return WorktreeWithPath{}, false
 }
 
 // findWorktreeRoot walks up from startDir looking for .wt/worktree.json.
