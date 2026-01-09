@@ -1,2 +1,4 @@
+github.com/calvinalkan/agent-task v0.1.0 h1:4VrWlTri74sfgtmOnunp6ZX9cIIZ19XuZLZS7q7aY1k=
+github.com/calvinalkan/agent-task v0.1.0/go.mod h1:cuSpM8m+rISbAeXFso96aRGLLSKPpSN5UKWVLoTLxVw=
 github.com/spf13/pflag v1.0.10 h1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=
 github.com/spf13/pflag v1.0.10/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
